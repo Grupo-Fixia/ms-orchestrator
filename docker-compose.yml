@@ -1,0 +1,184 @@
+version: '3.8'
+
+networks:
+  fixia-net:
+    driver: bridge
+
+volumes:
+  postgres_users_data:
+  postgres_payments_data:
+  kafka_data:
+  minio_data:
+
+services:
+
+  traefik:
+    image: traefik:v3.0
+    container_name: fixia-apigateway
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - fixia-net
+    profiles: ["infra", "full"]
+
+  postgres-users:
+    image: postgres:16-alpine
+    container_name: fixia-db-users
+    environment:
+      POSTGRES_DB: users_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_users_data:/var/lib/postgresql/data
+    networks:
+      - fixia-net
+    profiles: ["infra", "full"]
+
+  postgres-payments:
+    image: postgres:16-alpine
+    container_name: fixia-db-payments
+    environment:
+      POSTGRES_DB: payments_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_payments_data:/var/lib/postgresql/data
+    networks:
+      - fixia-net
+    profiles: ["infra", "full"]
+
+  kafka:
+    image: apache/kafka:latest
+    container_name: fixia-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - fixia-net
+    profiles: ["infra", "full"]
+
+  minio:
+    image: minio/minio
+    container_name: fixia-minio
+    ports:
+      - "9000:9000"
+      - "9801:9801"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadminpassword
+    command: server /data --console-address ":9801"
+    volumes:
+      - minio_data:/data
+    networks:
+      - fixia-net
+    profiles: ["infra", "full"]
+
+  ms-frontend:
+    build:
+      context: ../ms-frontend
+      dockerfile: Dockerfile
+    container_name: ms-frontend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ms-frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.ms-frontend.priority=1"
+      - "traefik.http.services.ms-frontend.loadbalancer.server.port=80"
+    networks:
+      - fixia-net
+    profiles: ["services", "full"]
+
+  ms-users:
+    build:
+      context: ../ms-users
+      dockerfile: Dockerfile
+    container_name: ms-users
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-users:5432/users_db
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ms-users.rule=PathPrefix(`/api/users`)"
+      - "traefik.http.services.ms-users.loadbalancer.server.port=8080"
+    depends_on:
+      - postgres-users
+      - kafka
+    networks:
+      - fixia-net
+    profiles: ["services", "full"]
+
+  ms-payments:
+    build:
+      context: ../ms-payments
+      dockerfile: Dockerfile
+    container_name: ms-payments
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-payments:5432/payments_db
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ms-payments.rule=PathPrefix(`/api/payments`)"
+      - "traefik.http.services.ms-payments.loadbalancer.server.port=8080"
+    depends_on:
+      - postgres-payments
+      - kafka
+    networks:
+      - fixia-net
+    profiles: ["services", "full"]
+
+  ms-matching-geo:
+    build:
+      context: ../ms-matching-geo
+      dockerfile: Dockerfile
+    container_name: ms-matching-geo
+    environment:
+      - KAFKA_HOST=kafka:9092
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ms-matching-geo.rule=PathPrefix(`/api/geo`)"
+      - "traefik.http.services.ms-matching-geo.loadbalancer.server.port=8000"
+    depends_on:
+      - kafka
+    networks:
+      - fixia-net
+    profiles: ["services", "full"]
+
+  md-intake-lakehouse:
+    build:
+      context: ../md-intake-lakehouse
+      dockerfile: Dockerfile
+    container_name: md-intake-lakehouse
+    environment:
+      - KAFKA_HOST=kafka:9092
+      - MINIO_HOST=minio:9000
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.md-intake-lakehouse.rule=PathPrefix(`/api/intake`)"
+      - "traefik.http.services.md-intake-lakehouse.loadbalancer.server.port=8080"
+    depends_on:
+      - kafka
+      - minio
+    networks:
+      - fixia-net
+    profiles: ["services", "full"]
