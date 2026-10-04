@@ -23,7 +23,7 @@ fi
 REPOS=(
     "https://github.com/Grupo-Fixia/ms-orchestrator.git"
     "https://github.com/Grupo-Fixia/ms-matching-geo.git"
-    "https://github.com/Grupo-Fixia/md-intake-lakehouse.git"
+    "https://github.com/Grupo-Fixia/ms-intake-lakehouse.git"
     "https://github.com/Grupo-Fixia/ms-users.git"
     "https://github.com/Grupo-Fixia/ms-payments.git"
     "https://github.com/Grupo-Fixia/ms-apigateway.git"
@@ -40,6 +40,21 @@ for URL in "${REPOS[@]}"; do
         echo -e "${BLUE}Clonando ${REPO_NAME}...${NC}"
         git clone "$URL"
     fi
+
+    # Entrar al repositorio, actualizar ramas y cambiar a develop
+    echo -e "${BLUE}Actualizando ramas y cambiando a 'develop' en ${REPO_NAME}...${NC}"
+    (
+        cd "$REPO_NAME" || exit 1
+        git fetch --all
+        
+        # Intentar cambiar a la rama develop si existe, y hacer pull
+        if git ls-remote --heads "$URL" develop | grep -q "develop"; then
+            git checkout develop
+            git pull origin develop
+        else
+            echo -e "\033[1;33mLa rama 'develop' no existe en el origen de ${REPO_NAME}. Manteniendo rama actual...\033[0m"
+        fi
+    )
 done
 
 # 2. Generación del archivo .env en ms-orchestrator
