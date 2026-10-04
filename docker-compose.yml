@@ -1,4 +1,13 @@
-version: '3.8'
+# Ubicación: ms-orchestrator/docker-compose.yml
+#
+# Uso:
+#   docker compose --profile full up -d --build                       # todo
+#   docker compose --profile infra up -d                              # solo infraestructura
+#   docker compose --profile infra --profile services up -d --build   # infra + servicios
+#
+# Las credenciales viven en .env (ver .env.example)
+
+name: fixia
 
 networks:
   fixia-net:
@@ -8,17 +17,20 @@ volumes:
   postgres_users_data:
   postgres_payments_data:
   kafka_data:
-  minio_data:
+  rustfs_data:
 
 services:
 
+  # ───────────────────────── API GATEWAY ─────────────────────────
   traefik:
-    image: traefik:v3.0
+    image: traefik:v3.6
     container_name: fixia-apigateway
+    restart: unless-stopped
     command:
-      - "--api.insecure=true"
+      - "--api.insecure=true"                      # dashboard solo para desarrollo
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=fixia-net"     # red por la que Traefik llega a los servicios
       - "--entrypoints.web.address=:80"
     ports:
       - "80:80"
@@ -29,17 +41,26 @@ services:
       - fixia-net
     profiles: ["infra", "full"]
 
+  # ───────────────────────── INFRAESTRUCTURA ─────────────────────────
   postgres-users:
     image: postgres:16-alpine
     container_name: fixia-db-users
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: users_db
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ${USERS_DB_NAME:-users_db}
+      POSTGRES_INITDB_ARGS: "--no-sync"          # acelera el initdb en discos lentos (solo desarrollo)
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"                      # solo accesible desde tu máquina
     volumes:
       - postgres_users_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s          # el primer arranque (initdb) puede ser lento en discos lentos
     networks:
       - fixia-net
     profiles: ["infra", "full"]
@@ -47,83 +68,143 @@ services:
   postgres-payments:
     image: postgres:16-alpine
     container_name: fixia-db-payments
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: payments_db
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ${PAYMENTS_DB_NAME:-payments_db}
+      POSTGRES_INITDB_ARGS: "--no-sync"          # acelera el initdb en discos lentos (solo desarrollo)
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_payments_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     networks:
       - fixia-net
     profiles: ["infra", "full"]
 
   kafka:
-    image: apache/kafka:latest
+    image: apache/kafka:3.9.0                      # versión fija en lugar de :latest
     container_name: fixia-kafka
+    restart: unless-stopped
     ports:
-      - "9092:9092"
+      - "127.0.0.1:29092:29092"                    # listener EXTERNAL para herramientas desde el host
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://:9092,EXTERNAL://:29092,CONTROLLER://:9093   # host vacío = todas las interfaces (Kafka rechaza 0.0.0.0 si cae al default)
+      # PLAINTEXT = tráfico entre contenedores (kafka:9092)
+      # EXTERNAL  = tráfico desde el host (localhost:29092)
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
     volumes:
       - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
     networks:
       - fixia-net
     profiles: ["infra", "full"]
 
-  minio:
-    image: minio/minio
-    container_name: fixia-minio
+  # MinIO retiró sus imágenes públicas (Docker Hub y Quay). RustFS es un reemplazo
+  # compatible con la API S3: API en :9000, consola web en :9001.
+  rustfs:
+    image: ${RUSTFS_IMAGE:-rustfs/rustfs:latest}   # cuando funcione, fija una versión concreta
+    container_name: fixia-rustfs
+    restart: unless-stopped
     ports:
-      - "9000:9000"
-      - "9801:9801"
+      - "127.0.0.1:9000:9000"                      # API S3
+      - "127.0.0.1:9001:9001"                      # consola web
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadminpassword
-    command: server /data --console-address ":9801"
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_CONSOLE_ENABLE: "true"
     volumes:
-      - minio_data:/data
+      - rustfs_data:/data
     networks:
       - fixia-net
     profiles: ["infra", "full"]
 
+  # Crea el bucket del lakehouse y termina (reintenta hasta que RustFS responda)
+  rustfs-init:
+    image: ${RC_IMAGE:-rustfs/rc:latest}
+    container_name: fixia-rustfs-init
+    depends_on:
+      - rustfs
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until /usr/bin/rc alias set rustfs http://rustfs:9000 "$${RUSTFS_ACCESS_KEY}" "$${RUSTFS_SECRET_KEY}"; do
+          echo "esperando a rustfs..."; sleep 2
+        done
+        /usr/bin/rc mb "rustfs/$${RUSTFS_BUCKET}" || echo "mb falló o el bucket ya existe"
+        /usr/bin/rc ls rustfs
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+      RUSTFS_BUCKET: ${RUSTFS_BUCKET:-lakehouse}
+    networks:
+      - fixia-net
+    restart: "no"
+    profiles: ["infra", "full"]
+
+  # ───────────────────────── FRONTEND ─────────────────────────
   ms-frontend:
     build:
       context: ../ms-frontend
       dockerfile: Dockerfile
     container_name: ms-frontend
+    restart: unless-stopped
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ms-frontend.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.ms-frontend.priority=1"
+      - "traefik.http.routers.ms-frontend.priority=1"     # catch-all: pierde contra /api/*
+      - "traefik.http.routers.ms-frontend.entrypoints=web"
       - "traefik.http.services.ms-frontend.loadbalancer.server.port=80"
     networks:
       - fixia-net
     profiles: ["services", "full"]
 
+  # ───────────────────────── MICROSERVICIOS ─────────────────────────
   ms-users:
     build:
       context: ../ms-users
       dockerfile: Dockerfile
     container_name: ms-users
+    restart: unless-stopped
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-users:5432/users_db
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-users:5432/${USERS_DB_NAME:-users_db}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ms-users.rule=PathPrefix(`/api/users`)"
+      - "traefik.http.routers.ms-users.priority=10"
+      - "traefik.http.routers.ms-users.entrypoints=web"
       - "traefik.http.services.ms-users.loadbalancer.server.port=8080"
     depends_on:
-      - postgres-users
-      - kafka
+      postgres-users:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     networks:
       - fixia-net
     profiles: ["services", "full"]
@@ -133,16 +214,23 @@ services:
       context: ../ms-payments
       dockerfile: Dockerfile
     container_name: ms-payments
+    restart: unless-stopped
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-payments:5432/payments_db
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-payments:5432/${PAYMENTS_DB_NAME:-payments_db}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ms-payments.rule=PathPrefix(`/api/payments`)"
+      - "traefik.http.routers.ms-payments.priority=10"
+      - "traefik.http.routers.ms-payments.entrypoints=web"
       - "traefik.http.services.ms-payments.loadbalancer.server.port=8080"
     depends_on:
-      - postgres-payments
-      - kafka
+      postgres-payments:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     networks:
       - fixia-net
     profiles: ["services", "full"]
@@ -152,33 +240,44 @@ services:
       context: ../ms-matching-geo
       dockerfile: Dockerfile
     container_name: ms-matching-geo
+    restart: unless-stopped
     environment:
-      - KAFKA_HOST=kafka:9092
+      KAFKA_HOST: kafka:9092
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ms-matching-geo.rule=PathPrefix(`/api/geo`)"
+      - "traefik.http.routers.ms-matching-geo.priority=10"
+      - "traefik.http.routers.ms-matching-geo.entrypoints=web"
       - "traefik.http.services.ms-matching-geo.loadbalancer.server.port=8000"
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     networks:
       - fixia-net
     profiles: ["services", "full"]
 
+  # Pipeline interno: consume de Kafka y escribe en RustFS (S3). Sin ruta en el gateway.
   md-intake-lakehouse:
     build:
       context: ../md-intake-lakehouse
       dockerfile: Dockerfile
     container_name: md-intake-lakehouse
+    restart: unless-stopped
     environment:
-      - KAFKA_HOST=kafka:9092
-      - MINIO_HOST=minio:9000
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.md-intake-lakehouse.rule=PathPrefix(`/api/intake`)"
-      - "traefik.http.services.md-intake-lakehouse.loadbalancer.server.port=8080"
+      KAFKA_HOST: kafka:9092
+      # Los nombres MINIO_* se mantienen para no tocar el código Go; apuntan a RustFS (API S3)
+      MINIO_HOST: rustfs:9000
+      MINIO_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      MINIO_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+      MINIO_BUCKET: ${RUSTFS_BUCKET:-lakehouse}
+      MINIO_USE_SSL: "false"
     depends_on:
-      - kafka
-      - minio
+      kafka:
+        condition: service_healthy
+      rustfs:
+        condition: service_started
+      rustfs-init:
+        condition: service_completed_successfully
     networks:
       - fixia-net
     profiles: ["services", "full"]
