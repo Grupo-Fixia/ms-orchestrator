@@ -257,11 +257,11 @@ services:
     profiles: ["services", "full"]
 
   # Pipeline interno: consume de Kafka y escribe en RustFS (S3). Sin ruta en el gateway.
-  md-intake-lakehouse:
+  ms-intake-lakehouse:
     build:
-      context: ../md-intake-lakehouse
+      context: ../ms-intake-lakehouse
       dockerfile: Dockerfile
-    container_name: md-intake-lakehouse
+    container_name: ms-intake-lakehouse
     restart: unless-stopped
     environment:
       KAFKA_HOST: kafka:9092
