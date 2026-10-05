@@ -194,6 +194,8 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-user}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-password}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?falta JWT_PRIVATE_KEY en .env, ejecute ./setup-dev.sh}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?falta JWT_PUBLIC_KEY en .env, ejecute ./setup-dev.sh}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ms-users.rule=PathPrefix(`/api/users`)"

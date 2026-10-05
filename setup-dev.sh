@@ -79,6 +79,37 @@ EOF
     echo -e "${GREEN}Archivo .env generado correctamente en ms-orchestrator.${NC}"
 fi
 
+# 2b. Claves JWT de ms-users (RS256). Se ejecuta siempre, también si el .env ya existía, y solo genera
+#     las claves si faltan: así los .env anteriores se completan sin pisar nada. Las claves viven solo en el
+#     .env (ignorado por git); nunca se versionan.
+if grep -q '^JWT_PRIVATE_KEY=' "$ENV_FILE"; then
+    echo -e "${GREEN}Las claves JWT ya existen en .env. Omitiendo generación.${NC}"
+else
+    echo -e "${BLUE}Generando claves JWT (RSA 2048) para ms-users...${NC}"
+    if ! command -v openssl &> /dev/null; then
+        echo -e "${RED}ERROR: openssl es necesario para generar las claves JWT.${NC}"
+        exit 1
+    fi
+
+    JWT_TMP_DIR=$(mktemp -d)
+    trap 'rm -rf "$JWT_TMP_DIR"' EXIT
+
+    if ! openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$JWT_TMP_DIR/private.pem" 2>/dev/null \
+        || ! openssl pkey -in "$JWT_TMP_DIR/private.pem" -pubout -out "$JWT_TMP_DIR/public.pem" 2>/dev/null; then
+        echo -e "${RED}ERROR: no se pudieron generar las claves JWT con openssl.${NC}"
+        exit 1
+    fi
+
+    # Una sola línea por clave, con los saltos de línea escritos como \n (formato que ms-users y compose aceptan).
+    {
+        printf '\n# Claves JWT de ms-users (RS256, solo desarrollo local). No las subas a git.\n'
+        printf 'JWT_PRIVATE_KEY="%s"\n' "$(awk 'NF{printf "%s\\n",$0}' "$JWT_TMP_DIR/private.pem")"
+        printf 'JWT_PUBLIC_KEY="%s"\n' "$(awk 'NF{printf "%s\\n",$0}' "$JWT_TMP_DIR/public.pem")"
+    } >> "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
+    echo -e "${GREEN}Claves JWT añadidas a .env.${NC}"
+fi
+
 # 3. Levantar los microservicios
 echo -e "\n${BLUE}---> 3. Levantando los microservicios...${NC}"
 cd ms-orchestrator || exit 1
