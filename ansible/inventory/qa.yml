@@ -1,0 +1,13 @@
+all:
+  vars:
+    ansible_user: estudiante
+    ansible_python_interpreter: /usr/bin/python3
+  children:
+    k3s:
+      hosts:
+        qa-k3s-01: { ansible_host: 10.43.98.211 }
+        qa-k3s-02: { ansible_host: 10.43.98.253 }
+        qa-k3s-03: { ansible_host: 10.43.99.6 }
+    observability:
+      hosts:
+        qa-obs-01: { ansible_host: 10.43.98.217 }

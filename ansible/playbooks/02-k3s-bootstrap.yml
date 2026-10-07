@@ -1,0 +1,127 @@
+- name: Primer servidor K3s (cluster-init)
+  hosts: qa-k3s-01
+  become: true
+
+  tasks:
+    - name: Directorio de configuración
+      ansible.builtin.file:
+        path: /etc/rancher/k3s
+        state: directory
+        mode: "0755"
+
+    - name: Instalar dependencias
+      ansible.builtin.apt:
+        name:
+          - curl
+        state: present
+        update_cache: true
+
+    - name: Configuración K3s
+      ansible.builtin.copy:
+        dest: /etc/rancher/k3s/config.yaml
+        mode: "0600"
+        content: |
+          cluster-init: true
+          token: "{{ k3s_token }}"
+          cluster-cidr: "{{ k3s_cluster_cidr }}"
+          service-cidr: "{{ k3s_service_cidr }}"
+          cluster-dns: 10.245.0.10
+          node-ip: "{{ ansible_host }}"
+          tls-san:
+            - "{{ k3s_api_endpoint }}"
+          write-kubeconfig-mode: "0644"
+          default-local-storage-path: "{{ k3s_local_storage_path }}"
+          {% if k3s_disable_traefik %}
+          disable:
+            - traefik
+          {% endif %}
+
+    - name: Directorio de datos persistentes
+      ansible.builtin.file:
+        path: "{{ k3s_local_storage_path }}"
+        state: directory
+        mode: "0755"
+
+    - name: Instalar K3s
+      ansible.builtin.shell: |
+        set -o pipefail
+        curl -sfL https://get.k3s.io |
+        INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - server
+      args:
+        creates: /usr/local/bin/k3s
+        executable: /bin/bash
+
+    - name: Esperar a que el nodo esté Ready
+      ansible.builtin.command: k3s kubectl get nodes
+      register: nodes
+      until:
+        - nodes.rc == 0
+        - "'Ready' in nodes.stdout"
+      retries: 20
+      delay: 10
+      changed_when: false
+
+
+- name: Servidores adicionales
+  hosts: qa-k3s-02,qa-k3s-03
+  become: true
+  serial: 1
+
+  tasks:
+    - name: Directorio de configuración
+      ansible.builtin.file:
+        path: /etc/rancher/k3s
+        state: directory
+        mode: "0755"
+
+    - name: Instalar dependencias
+      ansible.builtin.apt:
+        name:
+          - curl
+        state: present
+        update_cache: true
+
+    - name: Configuración K3s
+      ansible.builtin.copy:
+        dest: /etc/rancher/k3s/config.yaml
+        mode: "0600"
+        content: |
+          server: https://{{ k3s_api_endpoint }}:6443
+          token: "{{ k3s_token }}"
+          cluster-cidr: "{{ k3s_cluster_cidr }}"
+          service-cidr: "{{ k3s_service_cidr }}"
+          cluster-dns: 10.245.0.10
+          node-ip: "{{ ansible_host }}"
+          tls-san:
+            - "{{ k3s_api_endpoint }}"
+          write-kubeconfig-mode: "0644"
+          default-local-storage-path: "{{ k3s_local_storage_path }}"
+          {% if k3s_disable_traefik %}
+          disable:
+            - traefik
+          {% endif %}
+
+    - name: Directorio de datos persistentes
+      ansible.builtin.file:
+        path: "{{ k3s_local_storage_path }}"
+        state: directory
+        mode: "0755"
+
+    - name: Instalar K3s
+      ansible.builtin.shell: |
+        set -o pipefail
+        curl -sfL https://get.k3s.io |
+        INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - server
+      args:
+        creates: /usr/local/bin/k3s
+        executable: /bin/bash
+
+    - name: Esperar a que el nodo esté Ready
+      ansible.builtin.command: k3s kubectl get nodes
+      register: nodes
+      until:
+        - nodes.rc == 0
+        - "'Ready' in nodes.stdout"
+      retries: 20
+      delay: 10
+      changed_when: false
