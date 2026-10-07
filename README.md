@@ -28,6 +28,7 @@ Para configurar todo el entorno desde cero (clonar repositorios faltantes, gener
   - `ms-apigateway`
   - `ms-frontend`
 - Genera el archivo `.env` necesario con las credenciales por defecto (Bases de datos, MinIO, etc.).
+- Genera un par de claves RSA para firmar los tokens de `ms-users` (`JWT_PRIVATE_KEY` y `JWT_PUBLIC_KEY`) y lo añade al `.env`. Si tu `.env` ya existía, solo agrega las claves que falten y no toca lo demás. Requiere `openssl`.
 - Construye y levanta toda la infraestructura usando `docker-compose`.
 
 ### Detener los servicios
