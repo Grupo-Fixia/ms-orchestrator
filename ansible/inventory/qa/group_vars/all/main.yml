@@ -11,3 +11,10 @@ k3s_disable_servicelb: false
 k3s_version: "v1.37.1+k3s1"   # fija una versión; verifica la última estable antes de ejecutar
 k3s_token: "{{ vault_k3s_token }}"
 k3s_api_endpoint: 10.43.98.211
+traefik_version: "v3.3"     # verifica la última estable en hub.docker.com/_/traefik antes de ejecutar
+traefik_replicas: 2
+vault_version: "1.18"   # verifica la última estable en hub.docker.com/r/hashicorp/vault antes de ejecutar
+postgres_version: "16"
+mongo_version: "7.0"
+kafka_version: "3.9.0"   # confirma el tag en hub.docker.com/r/apache/kafka
+kafka_node_selector: "data"
