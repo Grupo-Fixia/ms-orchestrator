@@ -1,0 +1,23 @@
+- name: Cuotas de almacenamiento
+  hosts: qa-k3s-01
+  become: true
+  tasks:
+    - name: Renderizar manifiesto
+      ansible.builtin.template:
+        src: ../templates/storage-limits.yaml.j2
+        dest: /tmp/storage-limits.yaml
+        mode: "0644"
+
+    - name: Aplicar
+      ansible.builtin.command: k3s kubectl apply -f /tmp/storage-limits.yaml
+      register: apply
+      changed_when: "'configured' in apply.stdout or 'created' in apply.stdout"
+
+    - name: Verificar StorageClass por defecto
+      ansible.builtin.command: k3s kubectl get storageclass
+      register: sc
+      changed_when: false
+
+    - name: Mostrar resultado
+      ansible.builtin.debug:
+        var: sc.stdout_lines

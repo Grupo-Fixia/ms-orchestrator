@@ -1,0 +1,19 @@
+- name: Desplegar Vault (instancia única, PoC)
+  hosts: qa-k3s-01
+  become: true
+  tasks:
+    - name: Renderizar manifiesto
+      ansible.builtin.template:
+        src: ../templates/vault.yaml.j2
+        dest: /tmp/vault.yaml
+        mode: "0600"
+
+    - name: Aplicar
+      ansible.builtin.command: k3s kubectl apply -f /tmp/vault.yaml
+      register: apply
+      changed_when: "'configured' in apply.stdout or 'created' in apply.stdout"
+
+    - name: Esperar al pod (sellado, pero en ejecución)
+      ansible.builtin.command: >
+        k3s kubectl -n data wait --for=condition=Ready pod/vault-0 --timeout=180s
+      changed_when: false

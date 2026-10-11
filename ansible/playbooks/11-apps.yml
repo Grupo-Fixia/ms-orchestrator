@@ -1,0 +1,13 @@
+- name: Namespace apps y RBAC del deployer
+  hosts: qa-k3s-01
+  become: true
+  tasks:
+    - name: Renderizar manifiesto
+      ansible.builtin.template:
+        src: ../templates/apps-rbac.yaml.j2
+        dest: /tmp/apps-rbac.yaml
+        mode: "0644"
+    - name: Aplicar
+      ansible.builtin.command: k3s kubectl apply -f /tmp/apps-rbac.yaml
+      register: apply
+      changed_when: "'configured' in apply.stdout or 'created' in apply.stdout"
