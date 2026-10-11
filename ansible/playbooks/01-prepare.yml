@@ -1,0 +1,52 @@
+- name: Preparar nodos K3s
+  hosts: k3s
+  become: true
+  tasks:
+    - name: Paquetes base
+      ansible.builtin.apt:
+        name: [curl, ca-certificates, nfs-common, open-iscsi, jq, chrony, conntrack, ipset]
+        state: present
+        update_cache: true
+
+    - name: Deshabilitar swap
+      ansible.builtin.command: swapoff -a
+      changed_when: false
+
+    - name: Quitar swap de fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^([^#].*\sswap\s.*)$'
+        replace: '# \1'
+
+    - name: Módulos de kernel
+      community.general.modprobe:
+        name: "{{ item }}"
+        state: present
+        persistent: present
+      loop: [overlay, br_netfilter]
+
+    - name: Parámetros sysctl
+      ansible.posix.sysctl:
+        name: "{{ item.k }}"
+        value: "{{ item.v }}"
+        sysctl_file: /etc/sysctl.d/99-k3s.conf
+        reload: true
+      loop:
+        - { k: net.ipv4.ip_forward, v: "1" }
+        - { k: net.bridge.bridge-nf-call-iptables, v: "1" }
+        - { k: net.bridge.bridge-nf-call-ip6tables, v: "1" }
+        - { k: fs.inotify.max_user_watches, v: "524288" }
+        - { k: fs.inotify.max_user_instances, v: "512" }
+
+    - name: Deshabilitar servicios innecesarios
+      ansible.builtin.systemd:
+        name: "{{ item.name }}"
+        state: stopped
+        enabled: false
+      loop:
+        - { name: cups, on: "{{ disable_cups }}" }
+        - { name: cups-browsed, on: "{{ disable_cups }}" }
+        - { name: avahi-daemon, on: "{{ disable_avahi }}" }
+        - { name: xrdp, on: "{{ disable_xrdp }}" }
+      when: item.on | bool
+      failed_when: false

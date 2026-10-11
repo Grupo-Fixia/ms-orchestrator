@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-config
+  namespace: data
+data:
+  vault.hcl: |
+    ui = true
+    disable_mlock = true
+    storage "file" {
+      path = "/vault/data"
+    }
+    listener "tcp" {
+      address     = "0.0.0.0:8200"
+      tls_disable = 1
+    }
+    api_addr = "http://vault.data.svc:8200"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+  namespace: data
+spec:
+  selector:
+    app: vault
+  ports:
+    - { name: http, port: 8200, targetPort: 8200 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vault
+  namespace: data
+spec:
+  serviceName: vault
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault
+  template:
+    metadata:
+      labels:
+        app: vault
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 100
+        runAsGroup: 1000
+        runAsNonRoot: true
+
+      containers:
+        - name: vault
+          image: hashicorp/vault:{{ vault_version }}
+
+          command: ["vault"]
+          args: ["server", "-config=/vault/config/vault.hcl"]
+
+          ports:
+            - { name: http, containerPort: 8200 }
+
+          env:
+            - name: VAULT_ADDR
+              value: "http://127.0.0.1:8200"
+
+          readinessProbe:
+            httpGet:
+              path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
+              port: http
+            periodSeconds: 10
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+
+          volumeMounts:
+            - { name: config, mountPath: /vault/config }
+            - { name: data, mountPath: /vault/data }
+
+      volumes:
+        - name: config
+          configMap:
+            name: vault-config
+
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
