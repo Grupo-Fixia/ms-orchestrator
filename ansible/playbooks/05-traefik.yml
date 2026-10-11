@@ -1,0 +1,19 @@
+- name: Desplegar Traefik (manifiestos planos, sin Helm)
+  hosts: qa-k3s-01
+  become: true
+  tasks:
+    - name: Copiar manifiesto renderizado
+      ansible.builtin.template:
+        src: ../templates/traefik.yaml.j2
+        dest: /tmp/traefik.yaml
+        mode: "0644"
+
+    - name: Aplicar manifiesto
+      ansible.builtin.command: k3s kubectl apply -f /tmp/traefik.yaml
+      register: apply
+      changed_when: "'configured' in apply.stdout or 'created' in apply.stdout"
+
+    - name: Esperar a que Traefik esté disponible
+      ansible.builtin.command: >
+        k3s kubectl -n traefik rollout status deployment/traefik --timeout=180s
+      changed_when: false
