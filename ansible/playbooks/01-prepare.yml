@@ -1,5 +1,5 @@
-- name: Preparar nodos K3s
-  hosts: k3s
+- name: Preparar nodos (K3s y Observabilidad)
+  hosts: all
   become: true
   tasks:
     - name: Paquetes base
@@ -18,11 +18,18 @@
         regexp: '^([^#].*\sswap\s.*)$'
         replace: '# \1'
 
-    - name: Módulos de kernel
+    - name: Persistir módulos de kernel
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/k3s.conf
+        content: |
+          overlay
+          br_netfilter
+        mode: "0644"
+
+    - name: Cargar módulos de kernel
       community.general.modprobe:
         name: "{{ item }}"
         state: present
-        persistent: present
       loop: [overlay, br_netfilter]
 
     - name: Parámetros sysctl
@@ -44,9 +51,9 @@
         state: stopped
         enabled: false
       loop:
-        - { name: cups, on: "{{ disable_cups }}" }
-        - { name: cups-browsed, on: "{{ disable_cups }}" }
-        - { name: avahi-daemon, on: "{{ disable_avahi }}" }
-        - { name: xrdp, on: "{{ disable_xrdp }}" }
-      when: item.on | bool
+        - { name: cups, disable: "{{ disable_cups | default(true) | bool }}" }
+        - { name: cups-browsed, disable: "{{ disable_cups | default(true) | bool }}" }
+        - { name: avahi-daemon, disable: "{{ disable_avahi | default(true) | bool }}" }
+        - { name: xrdp, disable: "{{ disable_xrdp | default(false) | bool }}" }
+      when: item.disable | bool
       failed_when: false

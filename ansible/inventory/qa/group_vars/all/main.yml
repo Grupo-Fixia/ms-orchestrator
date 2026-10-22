@@ -18,3 +18,14 @@ postgres_version: "16"
 mongo_version: "7.0"
 kafka_version: "3.9.0"   # confirma el tag en hub.docker.com/r/apache/kafka
 kafka_node_selector: "data"
+prometheus_version: "v2.53.1"
+loki_version: "3.1.0"
+promtail_version: "3.1.0"
+grafana_version: "11.1.0"
+qa_domain: "qa.local"
+prometheus_retention: "15d"   # TSDB local
+loki_retention: "720h"        # 30 días de logs
+prometheus_storage: "5Gi"
+loki_storage: "10Gi"
+grafana_storage: "2Gi"
+grafana_admin_user: "admin"
