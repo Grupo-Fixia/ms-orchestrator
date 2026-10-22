@@ -1,0 +1,12 @@
+# Configuración K3s para el nodo dedicado de observabilidad (qa-obs-01)
+obs_k3s_version: "{{ k3s_version | default('v1.37.1+k3s1') }}"
+obs_cluster_cidr: "10.246.0.0/16"
+obs_service_cidr: "10.247.0.0/16"
+obs_cluster_dns: "10.247.0.10"
+obs_k3s_storage_path: "/data/kubernetes"
+obs_api_endpoint: "10.43.98.217"
+
+# Puertos dedicados de acceso externo
+grafana_port: 3000
+loki_port: 3100
+prometheus_port: 9090
