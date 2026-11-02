@@ -119,3 +119,4 @@ echo -e "${GREEN}✓ Permisos restringidos (chmod 600) para .env.${NC}"
 echo -e "\n${GREEN}====================================================${NC}"
 echo -e "${GREEN}  ¡Generación de claves completada correctamente!   ${NC}"
 echo -e "${GREEN}====================================================${NC}"
+
