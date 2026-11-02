@@ -318,6 +318,13 @@ services:
     restart: unless-stopped
     environment:
       KAFKA_HOST: kafka:9092
+      # Valida los tokens de ms-users con su clave pública y le consulta la revocación y la búsqueda de técnicos
+      # por la red interna (ms-users:8080/internal, sin ruta en Traefik). Misma clave interna que ms-users y ms-services.
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?falta JWT_PUBLIC_KEY en .env, ejecute ./setup-dev.sh}
+      JWT_ISSUER: https://auth.fixia.com
+      JWT_AUDIENCE: https://api.fixia.com
+      USERS_BASE_URL: http://ms-users:8080
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-dev-internal-key-fixia-2026}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ms-matching-geo.rule=PathPrefix(`/api/geo`)"
@@ -327,6 +334,8 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      ms-users:
+        condition: service_started
     networks:
       - fixia-net
     profiles: ["services", "full"]
