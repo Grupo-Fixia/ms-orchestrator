@@ -286,6 +286,11 @@ services:
     container_name: ms-payments
     restart: unless-stopped
     environment:
+      ConnectionStrings__PaymentsDb: "Host=postgres-payments;Port=5432;Database=${PAYMENTS_DB_NAME:-payments_db};Username=${POSTGRES_USER:-user};Password=${POSTGRES_PASSWORD:-password}"
+      Kafka__BootstrapServers: kafka:9092
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: 8080
+      # Compatibilidad adicional
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-payments:5432/${PAYMENTS_DB_NAME:-payments_db}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-user}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-password}
