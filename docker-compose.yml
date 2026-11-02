@@ -16,6 +16,7 @@ networks:
 volumes:
   postgres_users_data:
   postgres_payments_data:
+  postgres_services_data:
   kafka_data:
   rustfs_data:
 
@@ -88,6 +89,29 @@ services:
       - fixia-net
     profiles: ["infra", "full"]
 
+  postgres-services:
+    image: postgres:16-alpine
+    container_name: fixia-db-services
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${SERVICES_DB_NAME:-services_db}
+      POSTGRES_INITDB_ARGS: "--no-sync"          # acelera el initdb en discos lentos (solo desarrollo)
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - postgres_services_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - fixia-net
+    profiles: ["infra", "full"]
+
   kafka:
     image: apache/kafka:3.9.0                      # versión fija en lugar de :latest
     container_name: fixia-kafka
@@ -142,7 +166,7 @@ services:
       - fixia-net
     profiles: ["infra", "full"]
 
-  # Crea el bucket del lakehouse y termina (reintenta hasta que RustFS responda)
+  # Crea los buckets del lakehouse y evidencias (privado) y termina
   rustfs-init:
     image: ${RC_IMAGE:-rustfs/rc:latest}
     container_name: fixia-rustfs-init
@@ -154,12 +178,15 @@ services:
         until /usr/bin/rc alias set rustfs http://rustfs:9000 "$${RUSTFS_ACCESS_KEY}" "$${RUSTFS_SECRET_KEY}"; do
           echo "esperando a rustfs..."; sleep 2
         done
-        /usr/bin/rc mb "rustfs/$${RUSTFS_BUCKET}" || echo "mb falló o el bucket ya existe"
+        /usr/bin/rc mb "rustfs/$${RUSTFS_BUCKET}" || echo "mb lakehouse falló o el bucket ya existe"
+        /usr/bin/rc mb "rustfs/$${RUSTFS_BUCKET_EVIDENCES:-evidences}" || echo "mb evidences falló o el bucket ya existe"
+        /usr/bin/rc anonymous set private "rustfs/$${RUSTFS_BUCKET_EVIDENCES:-evidences}" || true
         /usr/bin/rc ls rustfs
     environment:
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
       RUSTFS_BUCKET: ${RUSTFS_BUCKET:-lakehouse}
+      RUSTFS_BUCKET_EVIDENCES: ${RUSTFS_BUCKET_EVIDENCES:-evidences}
     networks:
       - fixia-net
     restart: "no"
@@ -194,6 +221,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-user}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-password}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-dev-internal-key-fixia-2026}
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?falta JWT_PRIVATE_KEY en .env, ejecute ./setup-dev.sh}
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?falta JWT_PUBLIC_KEY en .env, ejecute ./setup-dev.sh}
     labels:
@@ -207,6 +235,46 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+    networks:
+      - fixia-net
+    profiles: ["services", "full"]
+
+  ms-services:
+    build:
+      context: ../ms-services
+      dockerfile: Dockerfile
+    container_name: ms-services
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-services:5432/${SERVICES_DB_NAME:-services_db}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      USERS_BASE_URL: http://ms-users:8080
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-dev-internal-key-fixia-2026}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?falta JWT_PUBLIC_KEY en .env, ejecute ./setup-dev.sh}
+      JWT_ISSUER: https://auth.fixia.com
+      JWT_AUDIENCE: https://api.fixia.com
+      RUSTFS_ENDPOINT: http://rustfs:9000
+      RUSTFS_BUCKET_EVIDENCES: ${RUSTFS_BUCKET_EVIDENCES:-evidences}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+      SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE: 10MB
+      SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE: 10MB
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ms-services.rule=PathPrefix(`/api/services`)"
+      - "traefik.http.routers.ms-services.priority=10"
+      - "traefik.http.routers.ms-services.entrypoints=web"
+      - "traefik.http.services.ms-services.loadbalancer.server.port=8080"
+    depends_on:
+      postgres-services:
+        condition: service_healthy
+      ms-users:
+        condition: service_started
+      rustfs:
+        condition: service_started
+      rustfs-init:
+        condition: service_completed_successfully
     networks:
       - fixia-net
     profiles: ["services", "full"]
