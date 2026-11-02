@@ -17,3 +17,24 @@
       ansible.builtin.command: >
         k3s kubectl -n data wait --for=condition=Ready pod/kafka-0 --timeout=300s
       changed_when: false
+
+    - name: Renderizar manifiesto de Kafka Exporter
+      ansible.builtin.template:
+        src: ../templates/kafka-exporter.yaml.j2
+        dest: /tmp/kafka-exporter.yaml
+        mode: "0644"
+
+    - name: Aplicar Kafka Exporter en namespace apps
+      ansible.builtin.command: k3s kubectl apply -f /tmp/kafka-exporter.yaml
+      register: apply_exporter
+      changed_when: "'configured' in apply_exporter.stdout or 'created' in apply_exporter.stdout"
+
+    - name: Esperar a que Kafka Exporter esté listo
+      ansible.builtin.command: >
+        k3s kubectl -n apps rollout status deployment/kafka-exporter --timeout=120s
+      changed_when: false
+
+    - name: Limpiar manifiesto temporal de exporter
+      ansible.builtin.file:
+        path: /tmp/kafka-exporter.yaml
+        state: absent
