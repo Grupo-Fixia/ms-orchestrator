@@ -1,0 +1,80 @@
+- name: Inicializar bases de datos y Secrets de microservicios en namespace apps
+  hosts: qa-k3s-01
+  become: true
+  vars:
+    rustfs_access_key_val: "{{ vault_rustfs_access_key | default('rustfsadmin') }}"
+    rustfs_secret_key_val: "{{ vault_rustfs_secret_key | default('rustfsadmin') }}"
+    payments_db_password_val: "{{ vault_payments_db_password | default('fixia_payments_qa_2026') }}"
+  tasks:
+    - name: Crear rol y base de datos ms_payments en PostgreSQL (si no existen)
+      ansible.builtin.shell: |
+        k3s kubectl -n data exec postgres-0 -- psql -U postgres -tc "SELECT 1 FROM pg_roles WHERE rolname = 'ms_payments'" | grep -q 1 || \
+          k3s kubectl -n data exec postgres-0 -- psql -U postgres -c "CREATE ROLE ms_payments WITH LOGIN PASSWORD '{{ payments_db_password_val }}';"
+        k3s kubectl -n data exec postgres-0 -- psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'ms_payments'" | grep -q 1 || \
+          k3s kubectl -n data exec postgres-0 -- psql -U postgres -c "CREATE DATABASE ms_payments OWNER ms_payments;"
+      changed_when: false
+
+    - name: Obtener JWT_PUBLIC_KEY e INTERNAL_API_KEY actuales desde ms-users-secrets
+      ansible.builtin.shell: |
+        JWT_PUB=$(k3s kubectl -n apps get secret ms-users-secrets -o jsonpath='{.data.JWT_PUBLIC_KEY}')
+        INT_KEY=$(k3s kubectl -n apps get secret ms-users-secrets -o jsonpath='{.data.INTERNAL_API_KEY}')
+        echo "${JWT_PUB}|${INT_KEY}"
+      register: shared_keys
+      changed_when: false
+
+    - name: Actualizar ms-services-secrets con credenciales de RustFS
+      ansible.builtin.shell: |
+        k3s kubectl -n apps patch secret ms-services-secrets --type='json' -p='[
+          {"op": "add", "path": "/stringData", "value": {
+            "RUSTFS_ACCESS_KEY": "{{ rustfs_access_key_val }}",
+            "RUSTFS_SECRET_KEY": "{{ rustfs_secret_key_val }}"
+          }}
+        ]'
+      changed_when: false
+
+    - name: Crear o actualizar Secret ms-matching-geo-secrets
+      ansible.builtin.shell: |
+        JWT_PUB="{{ shared_keys.stdout.split('|')[0] }}"
+        INT_KEY="{{ shared_keys.stdout.split('|')[1] }}"
+        cat <<EOF | k3s kubectl apply -f -
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: ms-matching-geo-secrets
+          namespace: apps
+        type: Opaque
+        data:
+          JWT_PUBLIC_KEY: "${JWT_PUB}"
+          INTERNAL_API_KEY: "${INT_KEY}"
+        EOF
+      changed_when: false
+
+    - name: Crear o actualizar Secret ms-intake-lakehouse-secrets
+      ansible.builtin.shell: |
+        cat <<EOF | k3s kubectl apply -f -
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: ms-intake-lakehouse-secrets
+          namespace: apps
+        type: Opaque
+        stringData:
+          MINIO_ACCESS_KEY: "{{ rustfs_access_key_val }}"
+          MINIO_SECRET_KEY: "{{ rustfs_secret_key_val }}"
+        EOF
+      changed_when: false
+
+    - name: Crear o actualizar Secret ms-payments-secrets
+      ansible.builtin.shell: |
+        cat <<EOF | k3s kubectl apply -f -
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: ms-payments-secrets
+          namespace: apps
+        type: Opaque
+        stringData:
+          SPRING_DATASOURCE_PASSWORD: "{{ payments_db_password_val }}"
+        EOF
+      changed_when: false
+

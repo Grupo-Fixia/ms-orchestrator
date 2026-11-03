@@ -214,6 +214,19 @@ data:
               cluster: 'qa'
               app: 'ms-services'
 
+      - job_name: qa-ms-payments
+        metrics_path: /actuator/prometheus
+        scrape_interval: 15s
+        static_configs:
+          - targets:
+              - '10.43.98.211:9103'
+              - '10.43.98.253:9103'
+              - '10.43.99.6:9103'
+            labels:
+              environment: 'qa'
+              cluster: 'qa'
+              app: 'ms-payments'
+
       # ─── 4. Clúster de Producción (Placeholder preparado para futuro despliegue) ───
       - job_name: prod-k3s-nodes-cadvisor
         scheme: https
@@ -248,6 +261,8 @@ metadata:
   labels: { app: prometheus }
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels: { app: prometheus }
   template:
