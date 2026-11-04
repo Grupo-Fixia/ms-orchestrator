@@ -1,0 +1,88 @@
+- name: Desplegar stack central de observabilidad (Prometheus + Loki + Promtail + Grafana)
+  hosts: qa-obs-01
+  become: true
+  tasks:
+    - name: Renderizar manifiesto
+      ansible.builtin.template:
+        src: ../templates/observability.yaml.j2
+        dest: /tmp/observability.yaml
+        mode: "0600"
+      vars:
+        dashboard_json_path: "{{ playbook_dir }}/../templates/dashboards/architecture-overview.json"
+
+    - name: Aplicar namespace, RBAC y cargas de trabajo
+      ansible.builtin.command: k3s kubectl apply -f /tmp/observability.yaml
+      register: apply
+      changed_when: "'configured' in apply.stdout or 'created' in apply.stdout"
+
+    - name: Esperar a que Loki esté listo
+      ansible.builtin.command: >
+        k3s kubectl -n observability rollout status statefulset/loki --timeout=180s
+      changed_when: false
+
+    - name: Esperar a que Prometheus esté listo
+      ansible.builtin.command: >
+        k3s kubectl -n observability rollout status deployment/prometheus --timeout=180s
+      changed_when: false
+
+    - name: Esperar a que Grafana esté listo
+      ansible.builtin.command: >
+        k3s kubectl -n observability rollout status deployment/grafana --timeout=180s
+      changed_when: false
+
+    - name: Esperar a que Promtail local esté desplegado
+      ansible.builtin.command: >
+        k3s kubectl -n observability rollout status daemonset/promtail --timeout=120s
+      changed_when: false
+
+    - name: Permitir puertos de Observabilidad en UFW (firewall)
+      ansible.builtin.command: "ufw allow {{ item }}/tcp"
+      loop:
+        - "3000"   # Grafana
+        - "9090"   # Prometheus
+        - "3100"   # Loki
+      failed_when: false
+      changed_when: false
+
+    - name: Borrar manifiesto renderizado (contiene credenciales)
+      ansible.builtin.file:
+        path: /tmp/observability.yaml
+        state: absent
+
+    - name: URLs de acceso a Observabilidad
+      ansible.builtin.debug:
+        msg:
+          - "======================================================================"
+          - " STACK DE OBSERVABILIDAD DESPLEGADO EXITOSAMENTE:"
+          - " Grafana:    http://{{ ansible_host }}:3000 (Usuario: admin)"
+          - " Prometheus: http://{{ ansible_host }}:9090"
+          - " Loki Push:  http://{{ ansible_host }}:3100/loki/api/v1/push"
+          - "======================================================================"
+
+- name: Desplegar agente Promtail en el clúster de QA
+  hosts: qa-k3s-01
+  become: true
+  tasks:
+    - name: Renderizar manifiesto del agente Promtail
+      ansible.builtin.template:
+        src: ../templates/promtail-agent.yaml.j2
+        dest: /tmp/promtail-agent.yaml
+        mode: "0600"
+      vars:
+        promtail_env: "qa"
+        promtail_cluster: "qa"
+
+    - name: Aplicar agente Promtail en clúster QA
+      ansible.builtin.command: k3s kubectl apply -f /tmp/promtail-agent.yaml
+      register: apply_agent
+      changed_when: "'configured' in apply_agent.stdout or 'created' in apply_agent.stdout"
+
+    - name: Esperar a que Promtail esté listo en los nodos de QA
+      ansible.builtin.command: >
+        k3s kubectl -n observability rollout status daemonset/promtail --timeout=120s
+      changed_when: false
+
+    - name: Limpiar manifiesto temporal
+      ansible.builtin.file:
+        path: /tmp/promtail-agent.yaml
+        state: absent

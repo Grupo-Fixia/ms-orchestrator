@@ -1,0 +1,80 @@
+- name: Instalar y configurar K3s en el nodo de Observabilidad
+  hosts: qa-obs-01
+  become: true
+
+  tasks:
+    - name: Directorio de configuración de K3s
+      ansible.builtin.file:
+        path: /etc/rancher/k3s
+        state: directory
+        mode: "0755"
+
+    - name: Directorio de almacenamiento persistente
+      ansible.builtin.file:
+        path: "{{ obs_k3s_storage_path | default('/data/kubernetes') }}"
+        state: directory
+        mode: "0755"
+
+    - name: Configuración de K3s para Observabilidad
+      ansible.builtin.copy:
+        dest: /etc/rancher/k3s/config.yaml
+        mode: "0600"
+        content: |
+          node-ip: "{{ ansible_host }}"
+          tls-san:
+            - "{{ ansible_host }}"
+            - "127.0.0.1"
+            - "localhost"
+            - "qa-obs-01"
+          cluster-cidr: "{{ obs_cluster_cidr | default('10.246.0.0/16') }}"
+          service-cidr: "{{ obs_service_cidr | default('10.247.0.0/16') }}"
+          cluster-dns: "{{ obs_cluster_dns | default('10.247.0.10') }}"
+          write-kubeconfig-mode: "0644"
+          default-local-storage-path: "{{ obs_k3s_storage_path | default('/data/kubernetes') }}"
+          disable:
+            - traefik
+
+    - name: Instalar K3s Server
+      ansible.builtin.shell: |
+        set -o pipefail
+        curl -sfL https://get.k3s.io |
+        INSTALL_K3S_VERSION="{{ obs_k3s_version | default('v1.37.1+k3s1') }}" sh -s - server
+      args:
+        creates: /usr/local/bin/k3s
+        executable: /bin/bash
+
+    - name: Esperar a que el nodo K3s de Observabilidad esté Ready
+      ansible.builtin.command: k3s kubectl get nodes
+      register: nodes
+      until:
+        - nodes.rc == 0
+        - "'Ready' in nodes.stdout"
+      retries: 20
+      delay: 5
+      changed_when: false
+
+    - name: Asegurar directorio .kube para usuario estudiante
+      ansible.builtin.file:
+        path: "/home/{{ ansible_user }}/.kube"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0700"
+
+    - name: Copiar kubeconfig local para usuario estudiante
+      ansible.builtin.copy:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: "/home/{{ ansible_user }}/.kube/config"
+        remote_src: true
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0600"
+
+    - name: Verificar estado del nodo
+      ansible.builtin.command: k3s kubectl get nodes -o wide
+      register: node_status
+      changed_when: false
+
+    - name: Mostrar estado del clúster de observabilidad
+      ansible.builtin.debug:
+        var: node_status.stdout_lines

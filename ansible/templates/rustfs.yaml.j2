@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rustfs-credentials
+  namespace: data
+type: Opaque
+stringData:
+  RUSTFS_ACCESS_KEY: "{{ vault_rustfs_access_key | default('rustfsadmin') }}"
+  RUSTFS_SECRET_KEY: "{{ vault_rustfs_secret_key | default('rustfsadmin') }}"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rustfs
+  namespace: data
+spec:
+  selector:
+    app: rustfs
+  ports:
+    - { name: s3, port: 9000, targetPort: 9000 }
+    - { name: console, port: 9001, targetPort: 9001 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rustfs
+  namespace: data
+spec:
+  serviceName: rustfs
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rustfs
+  template:
+    metadata:
+      labels:
+        app: rustfs
+    spec:
+      initContainers:
+        - name: fix-perms
+          image: busybox:1.36
+          command: ["sh", "-c", "chmod -R 0777 /data"]
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      containers:
+        - name: rustfs
+          image: {{ rustfs_image | default('rustfs/rustfs:latest') }}
+          ports:
+            - { name: s3, containerPort: 9000 }
+            - { name: console, containerPort: 9001 }
+          env:
+            - { name: RUSTFS_VOLUMES, value: "/data" }
+            - { name: RUSTFS_CONSOLE_ENABLE, value: "true" }
+          envFrom:
+            - secretRef:
+                name: rustfs-credentials
+          readinessProbe:
+            tcpSocket: { port: 9000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 9000 }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ rustfs_storage | default('5Gi') }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rustfs-init
+  namespace: data
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app: rustfs-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: rustfs-init
+          image: {{ rustfs_rc_image | default('rustfs/rc:latest') }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              until /usr/bin/rc alias set rustfs http://rustfs.data.svc.cluster.local:9000 "${RUSTFS_ACCESS_KEY}" "${RUSTFS_SECRET_KEY}"; do
+                echo "Esperando a rustfs..."; sleep 3
+              done
+              /usr/bin/rc mb "rustfs/{{ rustfs_bucket_lakehouse | default("lakehouse") }}" || echo "Bucket lakehouse ya existe"
+              /usr/bin/rc mb "rustfs/{{ rustfs_bucket_evidences | default("evidences") }}" || echo "Bucket evidences ya existe"
+              /usr/bin/rc anonymous set private "rustfs/{{ rustfs_bucket_evidences | default("evidences") }}" || true
+              /usr/bin/rc ls rustfs
+          envFrom:
+            - secretRef:
+                name: rustfs-credentials
