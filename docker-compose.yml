@@ -28,14 +28,14 @@ services:
     container_name: fixia-apigateway
     restart: unless-stopped
     command:
-      - "--api.insecure=true"                      # dashboard solo para desarrollo
+      - "--api.insecure=true"                      # solo accesible por loopback (DEV)
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=fixia-net"     # red por la que Traefik llega a los servicios
+      - "--providers.docker.network=${COMPOSE_PROJECT_NAME:-fixia}_fixia-net"
       - "--entrypoints.web.address=:80"
     ports:
       - "80:80"
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
@@ -201,10 +201,11 @@ services:
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.ms-frontend.rule=PathPrefix(`/`)"
+      # Reservar API e internos: una ruta desconocida devuelve 404 de Traefik, nunca la SPA.
+      - "traefik.http.routers.ms-frontend.rule=PathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/internal`)"
       - "traefik.http.routers.ms-frontend.priority=1"     # catch-all: pierde contra /api/*
       - "traefik.http.routers.ms-frontend.entrypoints=web"
-      - "traefik.http.services.ms-frontend.loadbalancer.server.port=80"
+      - "traefik.http.services.ms-frontend.loadbalancer.server.port=8080"
     networks:
       - fixia-net
     profiles: ["services", "full"]
@@ -226,7 +227,7 @@ services:
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?falta JWT_PUBLIC_KEY en .env, ejecute ./setup-dev.sh}
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.ms-users.rule=PathPrefix(`/api/users`)"
+      - "traefik.http.routers.ms-users.rule=Path(`/api/users`) || PathPrefix(`/api/users/`)"
       - "traefik.http.routers.ms-users.priority=10"
       - "traefik.http.routers.ms-users.entrypoints=web"
       - "traefik.http.services.ms-users.loadbalancer.server.port=8080"
@@ -262,7 +263,7 @@ services:
       SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE: 10MB
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.ms-services.rule=PathPrefix(`/api/services`)"
+      - "traefik.http.routers.ms-services.rule=Path(`/api/services`) || PathPrefix(`/api/services/`)"
       - "traefik.http.routers.ms-services.priority=10"
       - "traefik.http.routers.ms-services.entrypoints=web"
       - "traefik.http.services.ms-services.loadbalancer.server.port=8080"
@@ -297,7 +298,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.ms-payments.rule=PathPrefix(`/api/payments`)"
+      - "traefik.http.routers.ms-payments.rule=Path(`/api/payments`) || PathPrefix(`/api/payments/`)"
       - "traefik.http.routers.ms-payments.priority=10"
       - "traefik.http.routers.ms-payments.entrypoints=web"
       - "traefik.http.services.ms-payments.loadbalancer.server.port=8080"
@@ -327,7 +328,7 @@ services:
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-dev-internal-key-fixia-2026}
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.ms-matching-geo.rule=PathPrefix(`/api/geo`)"
+      - "traefik.http.routers.ms-matching-geo.rule=Path(`/api/geo`) || PathPrefix(`/api/geo/`)"
       - "traefik.http.routers.ms-matching-geo.priority=10"
       - "traefik.http.routers.ms-matching-geo.entrypoints=web"
       - "traefik.http.services.ms-matching-geo.loadbalancer.server.port=8000"
