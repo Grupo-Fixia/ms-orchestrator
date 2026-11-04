@@ -66,6 +66,8 @@
 
     - name: Crear o actualizar Secret ms-payments-secrets
       ansible.builtin.shell: |
+        JWT_PUB="{{ shared_keys.stdout.split('|')[0] }}"
+        INT_KEY="{{ shared_keys.stdout.split('|')[1] }}"
         cat <<EOF | k3s kubectl apply -f -
         apiVersion: v1
         kind: Secret
@@ -73,6 +75,9 @@
           name: ms-payments-secrets
           namespace: apps
         type: Opaque
+        data:
+          JWT_PUBLIC_KEY: "${JWT_PUB}"
+          INTERNAL_API_KEY: "${INT_KEY}"
         stringData:
           SPRING_DATASOURCE_PASSWORD: "{{ payments_db_password_val }}"
         EOF
