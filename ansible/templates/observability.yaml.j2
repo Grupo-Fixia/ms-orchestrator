@@ -129,6 +129,9 @@ data:
       # ─── 2. Clúster de QA (qa-k3s-01, qa-k3s-02, qa-k3s-03) ───
       - job_name: qa-k3s-nodes-cadvisor
         scheme: https
+{% if qa_prometheus_scraper_token is defined and qa_prometheus_scraper_token | length > 0 %}
+        bearer_token: "{{ qa_prometheus_scraper_token }}"
+{% endif %}
         tls_config:
           insecure_skip_verify: true
         metrics_path: /metrics/cadvisor
@@ -143,6 +146,9 @@ data:
 
       - job_name: qa-k3s-nodes-kubelet
         scheme: https
+{% if qa_prometheus_scraper_token is defined and qa_prometheus_scraper_token | length > 0 %}
+        bearer_token: "{{ qa_prometheus_scraper_token }}"
+{% endif %}
         tls_config:
           insecure_skip_verify: true
         metrics_path: /metrics

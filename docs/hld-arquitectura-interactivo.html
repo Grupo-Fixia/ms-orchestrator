@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fixia — Diseño de Alto Nivel (HLD) Arquitectura e Infraestructura</title>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+  </script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    header {
+      max-width: 1400px;
+      margin: 0 auto 24px auto;
+      background: #1e293b;
+      color: #ffffff;
+      padding: 20px 28px;
+      border-radius: 12px;
+    }
+    header h1 {
+      margin: 0 0 6px 0;
+      font-size: 24px;
+    }
+    header p {
+      margin: 0;
+      color: #cbd5e1;
+      font-size: 14px;
+    }
+    .card {
+      max-width: 1400px;
+      margin: 0 auto 28px auto;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      overflow-x: auto;
+    }
+    .card h2 {
+      margin-top: 0;
+      font-size: 18px;
+      border-bottom: 2px solid #f1f5f9;
+      padding-bottom: 10px;
+      color: #1e293b;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Fixia — Diseño de Alto Nivel (HLD)</h1>
+    <p>Arquitectura Lógica de Microservicios, Coreografía de Eventos en Kafka y Topología Física del Clúster K3s QA</p>
+  </header>
+
+  <section class="card">
+    <h2>1. HLD de Arquitectura Lógica (Microservicios, Datos, Mensajería y Observabilidad)</h2>
+    <pre class="mermaid">
+flowchart TB
+    subgraph Clientes["Capa de Presentación y Usuarios"]
+        USR["Usuarios (Cliente / Técnico / Empresa / Admin)"]
+        FE["ms-frontend (Flutter Web SPA - Nginx :8080 x2)"]
+    end
+
+    subgraph Gateway["Capa de Borde y Enrutamiento (namespace: traefik)"]
+        TR["API Gateway Traefik v3.0 (:80 HTTP / :8080 Metrics x2)"]
+    end
+
+    subgraph Microservicios["Capa de Microservicios de Dominio (namespace: apps)"]
+        MSU["ms-users (Java 21 / Spring Boot :8080 x2)"]
+        MSS["ms-services (Java 21 / Spring Boot :8080 x2)"]
+        MSG["ms-matching-geo (Python 3.12 / FastAPI :8000 x2)"]
+        MSP["ms-payments (.NET 8 / ASP.NET Core :8080 x2)"]
+        MSL["ms-intake-lakehouse (Go 1.22 Worker :8080 x1)"]
+    end
+
+    subgraph Datos["Capa de Persistencia, Eventos y Objetos (namespace: data)"]
+        PG["PostgreSQL 16 (Bases: ms_users, ms_services, ms_payments)"]
+        KF["Apache Kafka 3.9 KRaft (:9092 - Tópicos de Dominio)"]
+        RFS["RustFS S3 (:9000 - Buckets: evidences, lakehouse)"]
+        VLT["HashiCorp Vault 1.15 (:8200 - Gestión de Secretos)"]
+        MDB["MongoDB 7.0 (:27017 - Almacenamiento NoSQL)"]
+    end
+
+    subgraph Observabilidad["Capa de Observabilidad Centralizada (qa-obs-01 : 10.43.98.217)"]
+        PRM["Promtail DaemonSet (Agentes de Logs en cada nodo)"]
+        KEX["Kafka Exporter (:9308)"]
+        PRO["Prometheus (:9090 - 23 Targets UP)"]
+        LOK["Grafana Loki (:3100 - Agregación de Logs)"]
+        GRA["Grafana (:3000 - Dashboards de Arquitectura)"]
+    end
+
+    USR -->|"HTTP :80"| TR
+    TR -->|"Path: / (priority 1)"| FE
+    TR -->|"PathPrefix: /api/users (priority 10)"| MSU
+    TR -->|"PathPrefix: /api/services (priority 10)"| MSS
+    TR -->|"PathPrefix: /api/geo (priority 10)"| MSG
+    TR -->|"PathPrefix: /api/payments (priority 10)"| MSP
+
+    MSS -->|"HTTP Interno /internal/* (Perfiles, Elegibilidad, Empresas)"| MSU
+    MSS -->|"HTTP Interno /api/geo/matching/technicians"| MSG
+    MSG -->|"HTTP Interno /internal/technicians/search"| MSU
+    MSU -.->|"JWKS / Clave Pública RS256"| MSS
+    MSU -.->|"JWKS / Clave Pública RS256"| MSG
+    MSU -.->|"JWKS / Clave Pública RS256"| MSP
+
+    MSU -->|"JDBC (ms_users + outbox_events)"| PG
+    MSS -->|"JDBC (ms_services + outbox_events)"| PG
+    MSP -->|"EF Core (ms_payments + outbox_events)"| PG
+    MSS -->|"API S3 (Fotos de Evidencia)"| RFS
+
+    MSS ==>|"Outbox Relay -> fixia.services.service-requests"| KF
+    MSP ==>|"Outbox Relay -> fixia.payments.events"| KF
+    MSU ==>|"Outbox -> fixia.users.evaluations"| KF
+
+    KF ==>|"Consume servicio.contratado / servicio.cerrado"| MSP
+    KF ==>|"Consume pago.procesado / pago.fallido"| MSS
+    KF ==>|"Consume los 3 tópicos (GroupTopics)"| MSL
+    MSL ==>|"Valida JSON Schema y persiste idempotente"| RFS
+
+    KEX -->|"Métricas de Tópicos y Lag"| KF
+    PRO -->|"Scrape /actuator/prometheus y /metrics"| Microservicios
+    PRO -->|"Scrape :8080/metrics"| TR
+    PRO -->|"Scrape :9308"| KEX
+    PRM -->|"Push de Logs de Contenedores"| LOK
+    GRA -->|"Consultas PromQL"| PRO
+    GRA -->|"Consultas LogQL"| LOK
+    </pre>
+  </section>
+
+  <section class="card">
+    <h2>2. HLD de Infraestructura y Topología de Clústeres (Despliegue en QA)</h2>
+    <pre class="mermaid">
+flowchart LR
+    subgraph GitHub["GitHub Cloud & GHCR"]
+        GHA["GitHub Actions CI (Build & Test en rama Qa)"]
+        GHCR["GitHub Container Registry (ghcr.io/grupo-fixia/*)"]
+        GHA -->|"Push Docker Image"| GHCR
+    end
+
+    subgraph NodoCoord["Nodo Coordinador y Observabilidad: qa-obs-01 / nbig23 (10.43.98.217)"]
+        ANS["Ansible Playbooks (ms-orchestrator)"]
+        RUNNER["GitHub Self-Hosted Runner (Workflow CD)"]
+        subgraph K3sObs["Clúster K3s Observabilidad (namespace: observability)"]
+            P_PROM["Pod: prometheus (:9090)"]
+            P_LOKI["StatefulSet: loki-0 (:3100)"]
+            P_GRAF["Pod: grafana (:3000)"]
+            P_PROMT0["DaemonSet: promtail (local)"]
+        end
+    end
+
+    subgraph ClusterQA["Clúster K3s Principal de QA (Red 10.43.98.0/23 - Flannel VXLAN)"]
+        subgraph Node1["qa-k3s-01 / nbig17 (10.43.98.211) — Control Plane & Worker"]
+            API["K3s API Server (:6443) & ServiceLB"]
+            T1["traefik (1 réplica)"]
+            S1["ms-services (1 réplica)"]
+            PROMT1["promtail (DaemonSet)"]
+        end
+
+        subgraph Node2["qa-k3s-02 / nbig59 (10.43.98.253) — Worker"]
+            T2["traefik (1 réplica)"]
+            FE1["frontend (1 réplica)"]
+            U1["ms-users (1 réplica)"]
+            S2["ms-services (1 réplica)"]
+            P1["ms-payments (1 réplica)"]
+            G1["ms-matching-geo (1 réplica)"]
+            L1["ms-intake-lakehouse (1 réplica)"]
+            KE["kafka-exporter (1 réplica)"]
+            PG0["StatefulSet: postgres-0 (PVC 5Gi)"]
+            KF0["StatefulSet: kafka-0 (PVC 5Gi)"]
+            RFS0["StatefulSet: rustfs-0 (PVC 5Gi)"]
+            PROMT2["promtail (DaemonSet)"]
+        end
+
+        subgraph Node3["qa-k3s-03 / nbig65 (10.43.99.6) — Worker"]
+            FE2["frontend (1 réplica)"]
+            U2["ms-users (1 réplica)"]
+            P2["ms-payments (1 réplica)"]
+            G2["ms-matching-geo (1 réplica)"]
+            MDB0["StatefulSet: mongodb-0 (PVC 5Gi)"]
+            VLT0["StatefulSet: vault-0 (PVC 2Gi)"]
+            PROMT3["promtail (DaemonSet)"]
+        end
+    end
+
+    ANS -->|"Aprovisiona K3s, Datos, Secretos y Observabilidad (SSH)"| ClusterQA
+    RUNNER -->|"kubectl apply & rollout (KUBECONFIG)"| API
+    ClusterQA -->|"Pull con secret/ghcr-pull"| GHCR
+    P_PROM -->|"Scrape Métricas (:9100-:9104, :9108, :9180, :10250)"| ClusterQA
+    PROMT1 & PROMT2 & PROMT3 -->|"Envío de Logs HTTP :3100"| P_LOKI
+    </pre>
+  </section>
+</body>
+</html>
+

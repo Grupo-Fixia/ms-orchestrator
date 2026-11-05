@@ -1,0 +1,129 @@
+<mxfile host="app.diagrams.net" modified="2026-11-05T17:09:00.000Z" agent="Antigravity" version="24.7.17" type="device" pages="2">
+  <diagram id="logical-hld" name="1. HLD Arquitectura Lógica">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="layer_users" value="Capa de Presentación y Usuarios" style="swimlane;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="60" y="40" width="1440" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="node_usr" value="Usuarios&#xa;(Cliente / Técnico / Empresa / Admin)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="layer_users">
+          <mxGeometry x="340" y="40" width="260" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="node_fe" value="ms-frontend&#xa;(Flutter Web 3.22 SPA - Nginx :8080 x2)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="layer_users">
+          <mxGeometry x="840" y="40" width="280" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="layer_gw" value="Capa de Borde y Enrutamiento (namespace: traefik)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="60" y="180" width="1440" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="node_tr" value="API Gateway Traefik v3.0 (:80 HTTP / :8080 Metrics x2)&#xa;Prioridad 10: /api/users | /api/services | /api/geo | /api/payments   |   Prioridad 1: / (Frontend)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="layer_gw">
+          <mxGeometry x="340" y="40" width="780" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="layer_apps" value="Capa de Microservicios de Dominio y Analítica (namespace: apps)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="60" y="330" width="1440" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="node_msu" value="ms-users&#xa;(Java 21 / Spring Boot :8080 x2)&#xa;JWT RS256, Perfiles, Empresas (seed-qa), Evaluaciones" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="layer_apps">
+          <mxGeometry x="30" y="50" width="250" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="node_mss" value="ms-services&#xa;(Java 21 / Spring Boot :8080 x2)&#xa;Solicitudes, Postulaciones, Cotizaciones, Contratos, Outbox" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="layer_apps">
+          <mxGeometry x="315" y="50" width="260" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="node_msg" value="ms-matching-geo&#xa;(Python 3.12 / FastAPI :8000 x2)&#xa;Matching Haversine + Disponibilidad Horaria" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="layer_apps">
+          <mxGeometry x="610" y="50" width="240" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="node_msp" value="ms-payments&#xa;(.NET 8 / ASP.NET Core :8080 x2)&#xa;Billetera, Recargas, Retención, Liquidación, Reembolsos" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="layer_apps">
+          <mxGeometry x="885" y="50" width="260" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="node_msl" value="ms-intake-lakehouse&#xa;(Go 1.22 Worker :8080 x1)&#xa;GroupTopics Consumer + JSON Schema 2020-12" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="layer_apps">
+          <mxGeometry x="1175" y="50" width="240" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="layer_data" value="Capa de Persistencia, Mensajería y Objetos (namespace: data)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="60" y="540" width="1440" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="node_pg" value="PostgreSQL 16 (postgres-0 :5432)&#xa;Bases: ms_users | ms_services | ms_payments&#xa;+ Tablas Transaccionales outbox_events" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=12;fillColor=#ffffff;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="layer_data">
+          <mxGeometry x="60" y="45" width="310" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="node_kf" value="Apache Kafka 3.9 KRaft (kafka-0 :9092)&#xa;Tópicos: fixia.services.service-requests | fixia.payments.events | fixia.users.evaluations" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="layer_data">
+          <mxGeometry x="430" y="45" width="460" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="node_rfs" value="RustFS S3 (rustfs-0 :9000)&#xa;Buckets: evidences (Fotos) | lakehouse (Eventos JSON)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=12;fillColor=#ffffff;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="layer_data">
+          <mxGeometry x="940" y="45" width="260" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="node_vlt" value="Vault 1.15 (:8200) &amp;&#xa;MongoDB 7.0 (:27017)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="layer_data">
+          <mxGeometry x="1240" y="45" width="170" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="layer_obs" value="Capa de Observabilidad Centralizada (Clúster qa-obs-01 : 10.43.98.217 + Agentes en QA)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="60" y="740" width="1440" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="node_prom" value="Prometheus (:9090)&#xa;23/23 Targets UP (cAdvisor, Kubelet, Actuator, .NET, Go, Traefik, Kafka)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="layer_obs">
+          <mxGeometry x="80" y="45" width="420" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="node_loki" value="Promtail DaemonSet (x4) -&gt; Grafana Loki (:3100)&#xa;Ingesta centralizada de logs de todos los pods" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="layer_obs">
+          <mxGeometry x="560" y="45" width="380" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="node_graf" value="Grafana (:3000)&#xa;Dashboard Architecture Overview (Métricas + Logs)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="layer_obs">
+          <mxGeometry x="1000" y="45" width="360" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="HTTP :80" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;" edge="1" parent="1" source="node_usr" target="node_tr" />
+        <mxCell id="e2" value="Path / (prio 1)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="node_tr" target="node_fe" />
+        <mxCell id="e3" value="/api/users" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="node_tr" target="node_msu" />
+        <mxCell id="e4" value="/api/services" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="node_tr" target="node_mss" />
+        <mxCell id="e5" value="/api/geo" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="node_tr" target="node_msg" />
+        <mxCell id="e6" value="/api/payments" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="node_tr" target="node_msp" />
+        <mxCell id="e7" value="JDBC" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="node_msu" target="node_pg" />
+        <mxCell id="e8" value="JDBC" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="node_mss" target="node_pg" />
+        <mxCell id="e9" value="EF Core" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="node_msp" target="node_pg" />
+        <mxCell id="e10" value="Outbox &amp; Consume" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#9673a6;" edge="1" parent="1" source="node_mss" target="node_kf" />
+        <mxCell id="e11" value="Outbox &amp; Consume" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#9673a6;" edge="1" parent="1" source="node_msp" target="node_kf" />
+        <mxCell id="e12" value="GroupTopics" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#9673a6;" edge="1" parent="1" source="node_kf" target="node_msl" />
+        <mxCell id="e13" value="S3 PutObject" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="node_msl" target="node_rfs" />
+        <mxCell id="e14" value="S3 Evidences" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="node_mss" target="node_rfs" />
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="infra-hld" name="2. HLD Infraestructura K3s QA">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="box_gh" value="GitHub Cloud &amp; Container Registry (GHCR)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="380" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="gh_ci" value="GitHub Actions CI&#xa;(Test &amp; Docker Build en rama Qa)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontStyle=1;" vertex="1" parent="box_gh">
+          <mxGeometry x="40" y="45" width="300" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="gh_reg" value="GHCR (ghcr.io/grupo-fixia/*)&#xa;Imágenes versionadas por SHA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontStyle=1;" vertex="1" parent="box_gh">
+          <mxGeometry x="40" y="130" width="300" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="box_coord" value="Nodo Coordinador y Observabilidad: qa-obs-01 / nbig23 (10.43.98.217)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="40" y="300" width="380" height="520" as="geometry" />
+        </mxCell>
+        <mxCell id="coord_ans" value="ms-orchestrator (Ansible Playbooks)&#xa;01-prepare | 02-k3s | 03-data | 04-secrets | 05-obs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="box_coord">
+          <mxGeometry x="30" y="50" width="320" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="coord_run" value="GitHub Self-Hosted Runner (tags: self-hosted, qa)&#xa;Ejecuta cd.yml -&gt; kubectl apply &amp; rollout" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="box_coord">
+          <mxGeometry x="30" y="150" width="320" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="coord_k3s" value="Clúster K3s Local (namespace: observability)&#xa;- prometheus (:9090)&#xa;- loki-0 (:3100)&#xa;- grafana (:3000)&#xa;- promtail (DaemonSet)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontStyle=1;align=left;spacingLeft=15;" vertex="1" parent="box_coord">
+          <mxGeometry x="30" y="255" width="320" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="box_qa" value="Clúster K3s Principal de QA (Flannel VXLAN - Red 10.43.98.0/23)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="480" y="40" width="1060" height="780" as="geometry" />
+        </mxCell>
+        <mxCell id="n1" value="Nodo 1: qa-k3s-01 / nbig17 (10.43.98.211) — Control Plane + Worker&#xa;- K3s API Server (:6443) &amp; ServiceLB (:80, :9100-:9180)&#xa;- traefik (1/2)&#xa;- ms-services (1/2)&#xa;- promtail (DaemonSet)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontStyle=1;align=left;spacingLeft=15;" vertex="1" parent="box_qa">
+          <mxGeometry x="40" y="50" width="980" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="n2" value="Nodo 2: qa-k3s-02 / nbig59 (10.43.98.253) — Worker&#xa;- traefik (2/2) | frontend (1/2) | ms-users (1/2) | ms-services (2/2) | ms-payments (1/2) | ms-matching-geo (1/2)&#xa;- ms-intake-lakehouse (1/1) | kafka-exporter (1/1)&#xa;- StatefulSets (namespace: data): postgres-0 (5Gi) | kafka-0 (5Gi) | rustfs-0 (5Gi)&#xa;- promtail (DaemonSet)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontStyle=1;align=left;spacingLeft=15;" vertex="1" parent="box_qa">
+          <mxGeometry x="40" y="255" width="980" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="n3" value="Nodo 3: qa-k3s-03 / nbig65 (10.43.99.6) — Worker&#xa;- frontend (2/2) | ms-users (2/2) | ms-payments (2/2) | ms-matching-geo (2/2)&#xa;- StatefulSets (namespace: data): mongodb-0 (5Gi) | vault-0 (2Gi)&#xa;- promtail (DaemonSet)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontStyle=1;align=left;spacingLeft=15;" vertex="1" parent="box_qa">
+          <mxGeometry x="40" y="530" width="980" height="210" as="geometry" />
+        </mxCell>
+        <mxCell id="ie1" value="kubectl apply" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;" edge="1" parent="1" source="coord_run" target="n1" />
+        <mxCell id="ie2" value="Pull Image" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;" edge="1" parent="1" source="gh_reg" target="box_qa" />
+        <mxCell id="ie3" value="Scrape Metrics &amp; Push Logs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#b85450;" edge="1" parent="1" source="coord_k3s" target="box_qa" />
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
+
