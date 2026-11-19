@@ -50,49 +50,134 @@
       padding-bottom: 10px;
       color: #1e293b;
     }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 8px 12px;
+      text-align: left;
+    }
+    th {
+      background: #f1f5f9;
+      font-weight: 700;
+    }
   </style>
 </head>
 <body>
   <header>
     <h1>Fixia — Diseño de Alto Nivel (HLD)</h1>
-    <p>Arquitectura Lógica de Microservicios, Coreografía de Eventos en Kafka y Topología Física del Clúster K3s QA</p>
+    <p>Catálogo Oficial de los 6 Componentes de Aplicación, Lenguajes de Programación y Topología Física del Clúster K3s QA</p>
   </header>
 
   <section class="card">
-    <h2>1. HLD de Arquitectura Lógica (Microservicios, Datos, Mensajería y Observabilidad)</h2>
+    <h2>0. Catálogo Oficial de Microservicios y Lenguajes (Únicos 6 Componentes de Aplicación)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Componente</th>
+          <th>Tipo</th>
+          <th>Lenguaje de Programación</th>
+          <th>Framework / Runtime</th>
+          <th>Logo Oficial</th>
+          <th>Réplicas / Puerto</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td><strong>ms-frontend</strong> (<code>deployment/frontend</code>)</td>
+          <td>Frontend Web SPA</td>
+          <td><strong>Dart 3</strong></td>
+          <td><strong>Flutter Web 3.22 + Nginx 1.31 Alpine</strong></td>
+          <td>Flutter / Dart + Nginx</td>
+          <td>2 réplicas (<code>:8080</code>)</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td><strong>ms-users</strong> (<code>deployment/ms-users</code>)</td>
+          <td>Microservicio Backend</td>
+          <td><strong>Java 21 (OpenJDK 21)</strong></td>
+          <td><strong>Spring Boot 3.3 (Maven, JPA, Security)</strong></td>
+          <td>Java + Spring Boot</td>
+          <td>2 réplicas (<code>:8080</code>)</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td><strong>ms-services</strong> (<code>deployment/ms-services</code>)</td>
+          <td>Microservicio Backend</td>
+          <td><strong>Java 21 (OpenJDK 21)</strong></td>
+          <td><strong>Spring Boot 3.3 (Maven, JPA, AWS SDK S3)</strong></td>
+          <td>Java + Spring Boot</td>
+          <td>2 réplicas (<code>:8080</code>)</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td><strong>ms-matching-geo</strong> (<code>deployment/ms-matching-geo</code>)</td>
+          <td>Microservicio Backend</td>
+          <td><strong>Python 3.12</strong></td>
+          <td><strong>FastAPI + Uvicorn + Pydantic v2</strong></td>
+          <td>Python + FastAPI</td>
+          <td>2 réplicas (<code>:8000</code>)</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td><strong>ms-payments</strong> (<code>deployment/ms-payments</code>)</td>
+          <td>Microservicio Backend</td>
+          <td><strong>C# 12</strong></td>
+          <td><strong>.NET 8 (ASP.NET Core 8.0 Web API + EF Core 8)</strong></td>
+          <td>C# / .NET 8</td>
+          <td>2 réplicas (<code>:8080</code>)</td>
+        </tr>
+        <tr>
+          <td>6</td>
+          <td><strong>ms-intake-lakehouse</strong> (<code>deployment/ms-intake-lakehouse</code>)</td>
+          <td>Microservicio Worker</td>
+          <td><strong>Go (Golang) 1.22</strong></td>
+          <td><strong>Go Standard Library + kafka-go + aws-sdk-go-v2</strong></td>
+          <td>Go (Golang Gopher)</td>
+          <td>1 réplica (<code>:8080</code>)</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>1. HLD de Arquitectura Lógica (Con Lenguajes y Frameworks Explícitos)</h2>
     <pre class="mermaid">
 flowchart TB
     subgraph Clientes["Capa de Presentación y Usuarios"]
-        USR["Usuarios (Cliente / Técnico / Empresa / Admin)"]
-        FE["ms-frontend (Flutter Web SPA - Nginx :8080 x2)"]
+        USR["Usuarios Finales (Cliente / Técnico / Empresa / Admin)"]
+        FE["1. ms-frontend (deployment/frontend)<br/>LENGUAJE: Dart 3 | FRAMEWORK: Flutter Web 3.22 + Nginx 1.31<br/>Puerto :8080 (2 Réplicas)"]
     end
 
-    subgraph Gateway["Capa de Borde y Enrutamiento (namespace: traefik)"]
-        TR["API Gateway Traefik v3.0 (:80 HTTP / :8080 Metrics x2)"]
+    subgraph Gateway["Capa de Borde / API Gateway (namespace: traefik)"]
+        TR["API Gateway: Traefik v3.0 (Reverse Proxy)<br/>LENGUAJE DE MOTOR: Go | Puerto :80 HTTP / :8080 Metrics (2 Réplicas)"]
     end
 
-    subgraph Microservicios["Capa de Microservicios de Dominio (namespace: apps)"]
-        MSU["ms-users (Java 21 / Spring Boot :8080 x2)"]
-        MSS["ms-services (Java 21 / Spring Boot :8080 x2)"]
-        MSG["ms-matching-geo (Python 3.12 / FastAPI :8000 x2)"]
-        MSP["ms-payments (.NET 8 / ASP.NET Core :8080 x2)"]
-        MSL["ms-intake-lakehouse (Go 1.22 Worker :8080 x1)"]
+    subgraph Microservicios["Capa de los 5 Microservicios de Backend (namespace: apps)"]
+        MSU["2. ms-users<br/>LENGUAJE: Java 21 | FRAMEWORK: Spring Boot 3.3 (Maven)<br/>Puerto :8080 (2 Réplicas - perfil seed-qa)"]
+        MSS["3. ms-services<br/>LENGUAJE: Java 21 | FRAMEWORK: Spring Boot 3.3 (Maven)<br/>Puerto :8080 (2 Réplicas)"]
+        MSG["4. ms-matching-geo<br/>LENGUAJE: Python 3.12 | FRAMEWORK: FastAPI + Uvicorn<br/>Puerto :8000 (2 Réplicas - Stateless)"]
+        MSP["5. ms-payments<br/>LENGUAJE: C# 12 | FRAMEWORK: .NET 8 (ASP.NET Core 8.0 + EF Core)<br/>Puerto :8080 (2 Réplicas)"]
+        MSL["6. ms-intake-lakehouse<br/>LENGUAJE: Go (Golang) 1.22 | LIBRERÍAS: kafka-go + aws-sdk-go-v2<br/>Puerto :8080 (1 Réplica Worker)"]
     end
 
-    subgraph Datos["Capa de Persistencia, Eventos y Objetos (namespace: data)"]
-        PG["PostgreSQL 16 (Bases: ms_users, ms_services, ms_payments)"]
-        KF["Apache Kafka 3.9 KRaft (:9092 - Tópicos de Dominio)"]
-        RFS["RustFS S3 (:9000 - Buckets: evidences, lakehouse)"]
-        VLT["HashiCorp Vault 1.15 (:8200 - Gestión de Secretos)"]
-        MDB["MongoDB 7.0 (:27017 - Almacenamiento NoSQL)"]
+    subgraph Datos["Capa de Persistencia y Eventos Activos (namespace: data)"]
+        PG["PostgreSQL 16 (StatefulSet postgres-0 :5432)<br/>3 Bases de Datos: ms_users | ms_services | ms_payments"]
+        KF["Apache Kafka 3.9 KRaft (StatefulSet kafka-0 :9092)<br/>3 Tópicos: fixia.services.service-requests | fixia.payments.events | fixia.users.evaluations"]
+        RFS["RustFS S3 Storage (StatefulSet rustfs-0 :9000)<br/>2 Buckets S3: evidences (fotos) | lakehouse (eventos JSON)"]
     end
 
-    subgraph Observabilidad["Capa de Observabilidad Centralizada (qa-obs-01 : 10.43.98.217)"]
-        PRM["Promtail DaemonSet (Agentes de Logs en cada nodo)"]
-        KEX["Kafka Exporter (:9308)"]
+    subgraph Observabilidad["Capa de Observabilidad Centralizada (Nodo qa-obs-01 : 10.43.98.217)"]
+        PRM["Agente Promtail (DaemonSet en cada nodo K3s)"]
+        KEX["Agente Kafka Exporter (:9308)"]
         PRO["Prometheus (:9090 - 23 Targets UP)"]
         LOK["Grafana Loki (:3100 - Agregación de Logs)"]
-        GRA["Grafana (:3000 - Dashboards de Arquitectura)"]
+        GRA["Grafana (:3000 - Dashboards de Métricas y Logs)"]
     end
 
     USR -->|"HTTP :80"| TR
@@ -109,10 +194,10 @@ flowchart TB
     MSU -.->|"JWKS / Clave Pública RS256"| MSG
     MSU -.->|"JWKS / Clave Pública RS256"| MSP
 
-    MSU -->|"JDBC (ms_users + outbox_events)"| PG
-    MSS -->|"JDBC (ms_services + outbox_events)"| PG
-    MSP -->|"EF Core (ms_payments + outbox_events)"| PG
-    MSS -->|"API S3 (Fotos de Evidencia)"| RFS
+    MSU -->|"JDBC / JPA (BD: ms_users + outbox_events)"| PG
+    MSS -->|"JDBC / JPA (BD: ms_services + outbox_events)"| PG
+    MSP -->|"EF Core 8 / Npgsql (BD: ms_payments + outbox_events)"| PG
+    MSS -->|"AWS SDK S3 (Bucket: evidences)"| RFS
 
     MSS ==>|"Outbox Relay -> fixia.services.service-requests"| KF
     MSP ==>|"Outbox Relay -> fixia.payments.events"| KF
@@ -121,9 +206,9 @@ flowchart TB
     KF ==>|"Consume servicio.contratado / servicio.cerrado"| MSP
     KF ==>|"Consume pago.procesado / pago.fallido"| MSS
     KF ==>|"Consume los 3 tópicos (GroupTopics)"| MSL
-    MSL ==>|"Valida JSON Schema y persiste idempotente"| RFS
+    MSL ==>|"Valida JSON Schema 2020-12 y guarda en Bucket: lakehouse"| RFS
 
-    KEX -->|"Métricas de Tópicos y Lag"| KF
+    KEX -->|"Métricas de Tópicos y Consumer Lag"| KF
     PRO -->|"Scrape /actuator/prometheus y /metrics"| Microservicios
     PRO -->|"Scrape :8080/metrics"| TR
     PRO -->|"Scrape :9308"| KEX
@@ -134,7 +219,7 @@ flowchart TB
   </section>
 
   <section class="card">
-    <h2>2. HLD de Infraestructura y Topología de Clústeres (Despliegue en QA)</h2>
+    <h2>2. HLD de Infraestructura y Distribución Física por Nodos y Pods (Clúster K3s QA)</h2>
     <pre class="mermaid">
 flowchart LR
     subgraph GitHub["GitHub Cloud & GHCR"]
@@ -144,7 +229,7 @@ flowchart LR
     end
 
     subgraph NodoCoord["Nodo Coordinador y Observabilidad: qa-obs-01 / nbig23 (10.43.98.217)"]
-        ANS["Ansible Playbooks (ms-orchestrator)"]
+        ANS["ms-orchestrator: Playbooks Ansible (IaC - No es un microservicio)"]
         RUNNER["GitHub Self-Hosted Runner (Workflow CD)"]
         subgraph K3sObs["Clúster K3s Observabilidad (namespace: observability)"]
             P_PROM["Pod: prometheus (:9090)"]
@@ -154,37 +239,36 @@ flowchart LR
         end
     end
 
-    subgraph ClusterQA["Clúster K3s Principal de QA (Red 10.43.98.0/23 - Flannel VXLAN)"]
-        subgraph Node1["qa-k3s-01 / nbig17 (10.43.98.211) — Control Plane & Worker"]
-            API["K3s API Server (:6443) & ServiceLB"]
-            T1["traefik (1 réplica)"]
-            S1["ms-services (1 réplica)"]
-            PROMT1["promtail (DaemonSet)"]
+    subgraph ClusterQA["Clúster K3s Principal de QA (Red 10.43.98.0/23 - Flannel VXLAN 10.244.0.0/16)"]
+        subgraph Node1["qa-k3s-01 / nbig17 (10.43.98.211) — Control Plane & Worker (10.244.0.0/24)"]
+            API["K3s Control Plane (:6443), CoreDNS, Local-Path, Metrics-Server & ServiceLB (x5)"]
+            T1["Pod Gateway: traefik-7bbb4dc5c-h845r (10.244.0.46) — Réplica 1/2"]
+            S1["Pod [JAVA 21 / SPRING BOOT 3]: ms-services-5f58c77b65-ch77f (10.244.0.52) — Réplica 1/2"]
+            KF0["StatefulSet Broker: kafka-0 (10.244.0.15 | PVC data-kafka-0 8Gi)"]
+            PROMT1["Agente Logs: promtail-2lst2 (10.244.0.20)"]
         end
 
-        subgraph Node2["qa-k3s-02 / nbig59 (10.43.98.253) — Worker"]
-            T2["traefik (1 réplica)"]
-            FE1["frontend (1 réplica)"]
-            U1["ms-users (1 réplica)"]
-            S2["ms-services (1 réplica)"]
-            P1["ms-payments (1 réplica)"]
-            G1["ms-matching-geo (1 réplica)"]
-            L1["ms-intake-lakehouse (1 réplica)"]
-            KE["kafka-exporter (1 réplica)"]
-            PG0["StatefulSet: postgres-0 (PVC 5Gi)"]
-            KF0["StatefulSet: kafka-0 (PVC 5Gi)"]
-            RFS0["StatefulSet: rustfs-0 (PVC 5Gi)"]
-            PROMT2["promtail (DaemonSet)"]
+        subgraph Node2["qa-k3s-02 / nbig59 (10.43.98.253) — Worker 1 (10.244.1.0/24)"]
+            FE1["Pod [DART / FLUTTER WEB + NGINX]: frontend-d5df9cfdc-r8p6g (10.244.1.44) — Réplica 1/2"]
+            U1["Pod [JAVA 21 / SPRING BOOT 3]: ms-users-866d86db84-mbm9h (10.244.1.50 | seed-qa) — Réplica 1/2"]
+            S2["Pod [JAVA 21 / SPRING BOOT 3]: ms-services-5f58c77b65-rszs2 (10.244.1.52) — Réplica 2/2"]
+            P1["Pod [C# 12 / .NET 8]: ms-payments-6496744d9d-2md54 (10.244.1.51) — Réplica 1/2"]
+            G1["Pod [PYTHON 3.12 / FASTAPI]: ms-matching-geo-576ddfd96d-ks4tq (10.244.1.43) — Réplica 1/2"]
+            L1["Pod [GO / GOLANG 1.22]: ms-intake-lakehouse-7bddb8cd86-26bbv (10.244.1.53) — Réplica 1/1"]
+            PG0["StatefulSet BD: postgres-0 (10.244.1.6 | PVC data-postgres-0 5Gi)"]
+            KE["Agente Métricas: kafka-exporter-64d9bc5547-knnp4 (10.244.1.16)"]
+            PROMT2["Agente Logs: promtail-b6dhn (10.244.1.14) & ServiceLB (x5)"]
         end
 
-        subgraph Node3["qa-k3s-03 / nbig65 (10.43.99.6) — Worker"]
-            FE2["frontend (1 réplica)"]
-            U2["ms-users (1 réplica)"]
-            P2["ms-payments (1 réplica)"]
-            G2["ms-matching-geo (1 réplica)"]
-            MDB0["StatefulSet: mongodb-0 (PVC 5Gi)"]
-            VLT0["StatefulSet: vault-0 (PVC 2Gi)"]
-            PROMT3["promtail (DaemonSet)"]
+        subgraph Node3["qa-k3s-03 / nbig65 (10.43.99.6) — Worker 2 (10.244.3.0/24)"]
+            T2["Pod Gateway: traefik-7bbb4dc5c-9h8rl (10.244.3.50) — Réplica 2/2"]
+            FE2["Pod [DART / FLUTTER WEB + NGINX]: frontend-d5df9cfdc-rn49z (10.244.3.48) — Réplica 2/2"]
+            U2["Pod [JAVA 21 / SPRING BOOT 3]: ms-users-866d86db84-jc4b9 (10.244.3.55 | seed-qa) — Réplica 2/2"]
+            P2["Pod [C# 12 / .NET 8]: ms-payments-6496744d9d-d6wlc (10.244.3.56) — Réplica 2/2"]
+            G2["Pod [PYTHON 3.12 / FASTAPI]: ms-matching-geo-576ddfd96d-8wgql (10.244.3.47) — Réplica 2/2"]
+            RFS0["StatefulSet S3: rustfs-0 (10.244.3.37 | PVC data-rustfs-0 5Gi) + Job rustfs-init"]
+            UNUSED["Infraestructura Base sin uso activo: vault-0 (1Gi) & mongodb-0 (5Gi)"]
+            PROMT3["Agente Logs: promtail-qn985 (10.244.3.18) & ServiceLB (x5)"]
         end
     end
 
@@ -197,4 +281,3 @@ flowchart LR
   </section>
 </body>
 </html>
-
