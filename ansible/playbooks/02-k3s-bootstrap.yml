@@ -1,5 +1,5 @@
 - name: Primer servidor K3s (cluster-init)
-  hosts: qa-k3s-01
+  hosts: k3s_servers[0]
   become: true
 
   tasks:
@@ -63,7 +63,7 @@
 
 
 - name: Servidores adicionales
-  hosts: qa-k3s-02,qa-k3s-03
+  hosts: k3s_servers[1:]
   become: true
   serial: 1
 
@@ -124,4 +124,32 @@
         - "'Ready' in nodes.stdout"
       retries: 20
       delay: 10
+      changed_when: false
+
+
+- name: Etiquetar y aislar nodos según rol de carga de trabajo (apps vs data)
+  hosts: k3s_servers[0]
+  become: true
+  tasks:
+    - name: Etiquetar nodos de Microservicios y Frontend (workload=apps)
+      ansible.builtin.shell: |
+        NODE_IP="{{ hostvars[item]['ansible_host'] }}"
+        NODE_NAME=$(k3s kubectl get nodes -o wide --no-headers | awk -v ip="${NODE_IP}" '$6 == ip {print $1}')
+        if [ -n "${NODE_NAME}" ]; then
+          k3s kubectl label node "${NODE_NAME}" workload=apps --overwrite
+        fi
+      loop: "{{ k3s_app_hosts | default([]) }}"
+      changed_when: false
+
+    - name: Etiquetar y aplicar Taint en nodo de Almacenamiento y Eventos (workload=data)
+      ansible.builtin.shell: |
+        NODE_IP="{{ hostvars[item]['ansible_host'] }}"
+        NODE_NAME=$(k3s kubectl get nodes -o wide --no-headers | awk -v ip="${NODE_IP}" '$6 == ip {print $1}')
+        if [ -n "${NODE_NAME}" ]; then
+          k3s kubectl label node "${NODE_NAME}" workload=data --overwrite
+          {% if taint_data_nodes | default(false) | bool %}
+          k3s kubectl taint nodes "${NODE_NAME}" workload=data:NoSchedule --overwrite
+          {% endif %}
+        fi
+      loop: "{{ k3s_data_hosts | default([]) }}"
       changed_when: false

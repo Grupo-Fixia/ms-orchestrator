@@ -1,5 +1,5 @@
 - name: Desplegar MongoDB (PoC, sin replica set)
-  hosts: qa-k3s-01
+  hosts: k3s_servers[0]
   become: true
   tasks:
     - name: Renderizar manifiesto

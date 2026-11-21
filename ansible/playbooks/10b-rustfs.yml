@@ -1,5 +1,5 @@
 - name: Desplegar RustFS (Almacenamiento S3 para Lakehouse y Evidencias)
-  hosts: qa-k3s-01
+  hosts: k3s_servers[0]
   become: true
   tasks:
     - name: Renderizar manifiesto de RustFS

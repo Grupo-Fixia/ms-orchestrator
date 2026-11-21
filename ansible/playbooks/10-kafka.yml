@@ -1,5 +1,5 @@
 - name: Desplegar Kafka (KRaft, 1 broker, solo interno)
-  hosts: qa-k3s-01
+  hosts: k3s_servers[0]
   become: true
   tasks:
     - name: Renderizar manifiesto
@@ -23,6 +23,10 @@
         src: ../templates/kafka-exporter.yaml.j2
         dest: /tmp/kafka-exporter.yaml
         mode: "0644"
+
+    - name: Garantizar que exista el namespace apps
+      ansible.builtin.shell: k3s kubectl create namespace apps --dry-run=client -o yaml | k3s kubectl apply -f -
+      changed_when: false
 
     - name: Aplicar Kafka Exporter en namespace apps
       ansible.builtin.command: k3s kubectl apply -f /tmp/kafka-exporter.yaml

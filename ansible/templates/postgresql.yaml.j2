@@ -51,6 +51,13 @@ spec:
       labels:
         app: postgres
     spec:
+      nodeSelector:
+        workload: "{{ data_node_selector | default('data') }}"
+      tolerations:
+        - key: "workload"
+          operator: "Equal"
+          value: "{{ data_node_selector | default('data') }}"
+          effect: "NoSchedule"
       containers:
         - name: postgres
           image: postgres:{{ postgres_version }}

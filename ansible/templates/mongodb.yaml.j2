@@ -35,6 +35,13 @@ spec:
       labels:
         app: mongodb
     spec:
+      nodeSelector:
+        workload: "{{ data_node_selector | default('data') }}"
+      tolerations:
+        - key: "workload"
+          operator: "Equal"
+          value: "{{ data_node_selector | default('data') }}"
+          effect: "NoSchedule"
       containers:
         - name: mongodb
           image: mongo:{{ mongo_version }}

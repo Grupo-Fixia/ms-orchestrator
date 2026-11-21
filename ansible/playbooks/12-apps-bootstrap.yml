@@ -1,17 +1,39 @@
 - name: Inicializar bases de datos y Secrets de microservicios en namespace apps
-  hosts: qa-k3s-01
+  hosts: k3s_servers[0]
   become: true
   vars:
     rustfs_access_key_val: "{{ vault_rustfs_access_key | default('rustfsadmin') }}"
     rustfs_secret_key_val: "{{ vault_rustfs_secret_key | default('rustfsadmin') }}"
+    users_db_password_val: "{{ vault_users_db_password | default('fixia_users_2026') }}"
+    services_db_password_val: "{{ vault_services_db_password | default('fixia_services_2026') }}"
     payments_db_password_val: "{{ vault_payments_db_password | default('fixia_payments_qa_2026') }}"
+    internal_api_key_val: "{{ vault_internal_api_key | default('fixia_internal_secret_key_2026') }}"
   tasks:
-    - name: Crear rol y base de datos ms_payments en PostgreSQL (si no existen)
+    - name: Crear roles y bases de datos (ms_users, ms_services, ms_payments) en PostgreSQL (si no existen)
       ansible.builtin.shell: |
-        k3s kubectl -n data exec postgres-0 -- psql -U postgres -tc "SELECT 1 FROM pg_roles WHERE rolname = 'ms_payments'" | grep -q 1 || \
-          k3s kubectl -n data exec postgres-0 -- psql -U postgres -c "CREATE ROLE ms_payments WITH LOGIN PASSWORD '{{ payments_db_password_val }}';"
-        k3s kubectl -n data exec postgres-0 -- psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'ms_payments'" | grep -q 1 || \
-          k3s kubectl -n data exec postgres-0 -- psql -U postgres -c "CREATE DATABASE ms_payments OWNER ms_payments;"
+        for entry in "ms_users:{{ users_db_password_val }}" "ms_services:{{ services_db_password_val }}" "ms_payments:{{ payments_db_password_val }}"; do
+          DB_NAME="${entry%%:*}"
+          DB_PASS="${entry#*:}"
+          k3s kubectl -n data exec postgres-0 -- psql -U postgres -tc "SELECT 1 FROM pg_roles WHERE rolname = '${DB_NAME}'" | grep -q 1 || \
+            k3s kubectl -n data exec postgres-0 -- psql -U postgres -c "CREATE ROLE ${DB_NAME} WITH LOGIN PASSWORD '${DB_PASS}';"
+          k3s kubectl -n data exec postgres-0 -- psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'" | grep -q 1 || \
+            k3s kubectl -n data exec postgres-0 -- psql -U postgres -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_NAME};"
+        done
+      changed_when: false
+
+    - name: Garantizar existencia de ms-users-secrets (generar par RSA-2048 JWT si es clúster nuevo)
+      ansible.builtin.shell: |
+        if ! k3s kubectl -n apps get secret ms-users-secrets >/dev/null 2>&1; then
+          TMP_DIR=$(mktemp -d)
+          openssl genpkey -algorithm RSA -out "${TMP_DIR}/jwt_private.pem" -pkeyopt rsa_keygen_bits:2048
+          openssl rsa -pubout -in "${TMP_DIR}/jwt_private.pem" -out "${TMP_DIR}/jwt_public.pem"
+          k3s kubectl -n apps create secret generic ms-users-secrets \
+            --from-file=JWT_PRIVATE_KEY="${TMP_DIR}/jwt_private.pem" \
+            --from-file=JWT_PUBLIC_KEY="${TMP_DIR}/jwt_public.pem" \
+            --from-literal=INTERNAL_API_KEY="{{ internal_api_key_val }}" \
+            --from-literal=SPRING_DATASOURCE_PASSWORD="{{ users_db_password_val }}"
+          rm -rf "${TMP_DIR}"
+        fi
       changed_when: false
 
     - name: Obtener JWT_PUBLIC_KEY e INTERNAL_API_KEY actuales desde ms-users-secrets
@@ -22,14 +44,25 @@
       register: shared_keys
       changed_when: false
 
-    - name: Actualizar ms-services-secrets con credenciales de RustFS
+    - name: Crear o actualizar Secret ms-services-secrets
       ansible.builtin.shell: |
-        k3s kubectl -n apps patch secret ms-services-secrets --type='json' -p='[
-          {"op": "add", "path": "/stringData", "value": {
-            "RUSTFS_ACCESS_KEY": "{{ rustfs_access_key_val }}",
-            "RUSTFS_SECRET_KEY": "{{ rustfs_secret_key_val }}"
-          }}
-        ]'
+        JWT_PUB="{{ shared_keys.stdout.split('|')[0] }}"
+        INT_KEY="{{ shared_keys.stdout.split('|')[1] }}"
+        cat <<EOF | k3s kubectl apply -f -
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: ms-services-secrets
+          namespace: apps
+        type: Opaque
+        data:
+          JWT_PUBLIC_KEY: "${JWT_PUB}"
+          INTERNAL_API_KEY: "${INT_KEY}"
+        stringData:
+          SPRING_DATASOURCE_PASSWORD: "{{ services_db_password_val }}"
+          RUSTFS_ACCESS_KEY: "{{ rustfs_access_key_val }}"
+          RUSTFS_SECRET_KEY: "{{ rustfs_secret_key_val }}"
+        EOF
       changed_when: false
 
     - name: Crear o actualizar Secret ms-matching-geo-secrets
@@ -82,4 +115,3 @@
           SPRING_DATASOURCE_PASSWORD: "{{ payments_db_password_val }}"
         EOF
       changed_when: false
-

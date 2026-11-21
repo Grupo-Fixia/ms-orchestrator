@@ -49,6 +49,58 @@ metadata:
 spec:
   controller: traefik.io/ingress-controller
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traefik-dynamic-config
+  namespace: traefik
+data:
+  dynamic.yml: |
+    http:
+      middlewares:
+        api-security:
+          headers:
+            accessControlAllowMethods:
+              - GET
+              - POST
+              - PUT
+              - PATCH
+              - DELETE
+              - OPTIONS
+            accessControlAllowHeaders:
+              - Authorization
+              - Content-Type
+              - Accept
+              - Origin
+              - X-Requested-With
+              - Idempotency-Key
+            accessControlAllowOriginList:
+              - "https://hook-excellence-champion-wallet.trycloudflare.com"
+              - "http://10.43.98.231"
+              - "http://10.43.98.244"
+              - "http://10.43.98.211"
+            accessControlAllowCredentials: true
+            accessControlMaxAge: 86400
+            addVaryHeader: true
+            stsSeconds: 31536000
+            stsIncludeSubdomains: true
+            contentTypeNosniff: true
+            frameDeny: true
+            browserXssFilter: true
+            referrerPolicy: "strict-origin-when-cross-origin"
+            permissionsPolicy: "geolocation=(self), camera=(), microphone=(), payment=()"
+            contentSecurityPolicy: "default-src 'none'; frame-ancestors 'none'"
+            customResponseHeaders:
+              Server: ""
+              Cache-Control: "no-store, no-cache, must-revalidate"
+        api-ratelimit:
+          rateLimit:
+            average: 50
+            burst: 100
+            sourceCriterion:
+              ipStrategy:
+                depth: 1
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -66,6 +118,8 @@ spec:
       labels:
         app: traefik
     spec:
+      nodeSelector:
+        workload: apps
       serviceAccountName: traefik
       topologySpreadConstraints:
         - maxSkew: 1
@@ -79,6 +133,8 @@ spec:
           image: traefik:{{ traefik_version }}
           args:
             - --entrypoints.web.address=:8000
+            - --entrypoints.web.forwardedheaders.trustedips=10.244.0.0/16,10.245.0.0/16
+            - --entrypoints.web.http.middlewares=api-security@file,api-ratelimit@file
             - --entrypoints.websecure.address=:8443
             - --entrypoints.metrics.address=:8080
             - --entrypoints.ping.address=:8082
@@ -88,6 +144,7 @@ spec:
             - --metrics.prometheus.entrypoint=metrics
             - --providers.kubernetesingress=true
             - --providers.kubernetesingress.ingressclass=traefik
+            - --providers.file.filename=/etc/traefik/dynamic.yml
             - --log.level=INFO
             - --accesslog=true
           ports:
@@ -95,6 +152,10 @@ spec:
             - { name: websecure, containerPort: 8443 }
             - { name: metrics, containerPort: 8080 }
             - { name: ping, containerPort: 8082 }
+          volumeMounts:
+            - name: dynamic-config
+              mountPath: /etc/traefik
+              readOnly: true
           readinessProbe:
             httpGet: { path: /ping, port: ping }
             initialDelaySeconds: 5
@@ -113,6 +174,10 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
+      volumes:
+        - name: dynamic-config
+          configMap:
+            name: traefik-dynamic-config
 ---
 apiVersion: v1
 kind: Service

@@ -28,6 +28,11 @@ spec:
     spec:
       nodeSelector:
         workload: "{{ kafka_node_selector }}"
+      tolerations:
+        - key: "workload"
+          operator: "Equal"
+          value: "{{ kafka_node_selector | default('data') }}"
+          effect: "NoSchedule"
       initContainers:
         - name: fix-perms
           image: busybox:1.36

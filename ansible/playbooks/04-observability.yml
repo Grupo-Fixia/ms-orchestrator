@@ -1,5 +1,5 @@
 - name: Desplegar stack central de observabilidad (Prometheus + Loki + Promtail + Grafana)
-  hosts: qa-obs-01
+  hosts: observability
   become: true
   tasks:
     - name: Renderizar manifiesto
@@ -59,8 +59,8 @@
           - " Loki Push:  http://{{ ansible_host }}:3100/loki/api/v1/push"
           - "======================================================================"
 
-- name: Desplegar agente Promtail en el clúster de QA
-  hosts: qa-k3s-01
+- name: Desplegar agente Promtail en el clúster K3s
+  hosts: k3s_servers[0]
   become: true
   tasks:
     - name: Renderizar manifiesto del agente Promtail
@@ -69,8 +69,8 @@
         dest: /tmp/promtail-agent.yaml
         mode: "0600"
       vars:
-        promtail_env: "qa"
-        promtail_cluster: "qa"
+        promtail_env: "{{ env | default('qa') }}"
+        promtail_cluster: "{{ cluster_name | default('qa') }}"
 
     - name: Aplicar agente Promtail en clúster QA
       ansible.builtin.command: k3s kubectl apply -f /tmp/promtail-agent.yaml

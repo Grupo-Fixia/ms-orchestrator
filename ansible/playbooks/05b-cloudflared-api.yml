@@ -1,0 +1,19 @@
+- name: Desplegar Cloudflare Tunnel para el API Gateway (Traefik)
+  hosts: k3s_servers[0]
+  become: true
+  tasks:
+    - name: Renderizar manifiesto de cloudflared-api
+      ansible.builtin.template:
+        src: ../templates/cloudflared-api.yaml.j2
+        dest: /tmp/cloudflared-api.yaml
+        mode: "0644"
+
+    - name: Aplicar manifiesto de cloudflared-api
+      ansible.builtin.command: k3s kubectl apply -f /tmp/cloudflared-api.yaml
+      register: apply
+      changed_when: "'configured' in apply.stdout or 'created' in apply.stdout"
+
+    - name: Esperar a que cloudflared-api esté conectado y listo
+      ansible.builtin.command: >
+        k3s kubectl -n traefik rollout status deployment/cloudflared-api --timeout=180s
+      changed_when: false
