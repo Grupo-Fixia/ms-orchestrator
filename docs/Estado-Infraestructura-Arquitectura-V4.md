@@ -1,257 +1,182 @@
-# Documentación de Infraestructura y Arquitectura — Fixia Proyecto V4
+# Documentación de Infraestructura y Estado Operativo — Plataforma Fixia (Producción, QA y Observabilidad)
 
-> **Fecha y Hora de Extracción:** 2026-11-05 17:59 (Hora Local)  
-> **Ambiente:** QA (Clúster K3s Multi-Nodo) + Servidor Central de Observabilidad  
-> **Coordinador K3s:** `qa-k3s-01` (`10.43.98.211`) | **Observabilidad:** `qa-obs-01` (`10.43.98.217`)  
-> **Estado General:** 100% Operativo — Todos los microservicios, bases de datos, bus Kafka y observabilidad en estado `Running` / `UP`.
-
----
-
-## 1. Verificación del Despliegue de Frontend (`frontend-dfbb99586`)
-
-### ¿Hubo Rollback o Error al reconstruir el Frontend?
-**NO hubo rollback ni error.**
-El deployment `frontend` se actualizó exitosamente a la revisión 12 (`Revision: 12`) con la imagen recién compilada desde la rama `Qa`:
-- **Commit en Qa:** `26c4337f7157` (`promocion/GC-515-GC-514-front`: cancelar solicitud y cambiar dirección exacta).
-- **Imagen Desplegada:** `ghcr.io/grupo-fixia/ms-frontend:26c4337f7157`
-- **Estado de Pods:**
-  - `pod/frontend-dfbb99586-h2ntc`: `1/1 Running`, `0 Restarts`, IP `10.244.1.57`, Nodo `nbig59`.
-  - `pod/frontend-dfbb99586-zrrj4`: `1/1 Running`, `0 Restarts`, IP `10.244.1.56`, Nodo `nbig59`.
-- **Réplicas Deseadas / Listas:** `2 / 2` (`UPDATED: 2`, `READY: 2`).
+> **Fecha de Corte y Verificación en Vivo:** 2026-11-24  
+> **Ambientes Documentados:**
+> 1. **Clúster K3s HA de Producción:** `prod-k3s-01` (`10.43.98.231` / `nbig37`), `prod-k3s-02` (`10.43.98.244` / `nbig50`), `prod-k3s-03` (`10.43.100.155` / `nbig452`).
+> 2. **Clúster K3s HA de QA:** `qa-k3s-01` (`10.43.98.211` / `nbig17`), `qa-k3s-02` (`10.43.98.253` / `nbig59`), `qa-k3s-03` (`10.43.99.6` / `nbig65`).
+> 3. **Nodo Central de Orquestación, CI/CD y Observabilidad:** `qa-obs-01` (`10.43.98.217` / `nbig23`).
+> **Estado General:** **100% Operativo** — Todos los nodos `Ready`, todos los pods en `Running`, las migraciones Flyway `V14` (`ms_users`) y `V19` (`ms_services`) aplicadas, los 9 tópicos de Kafka activos (5 con `cleanup.policy=compact`), y **47 de 47 targets de Prometheus en estado `UP`**.
 
 ---
 
-## 2. Microservicios y Frontend (`namespace: apps`)
+## 1. Endpoints Públicos y Internos por Ambiente
 
-### Pods en Ejecución
+| Ambiente | Servicio / Punto de Entrada | URL / Endpoint | Protocolo y Seguridad |
+| :--- | :--- | :--- | :--- |
+| **Producción (Público)** | **Frontend Web SPA (`ms-frontend`)** | `https://hook-excellence-champion-wallet.trycloudflare.com` | HTTPS (`TLS 1.3` vía Cloudflare Tunnel → `service/frontend:80`) |
+| **Producción (Público)** | **API Gateway (`traefik`)** | `https://fits-descending-section-constant.trycloudflare.com` | HTTPS (`TLS 1.3` vía Cloudflare Tunnel → `service/traefik:80`) |
+| **Producción (LAN)** | **API Gateway & Frontend (LAN)** | `http://10.43.98.231` / `http://10.43.98.244` | HTTP interno balanceado por `ServiceLB` |
+| **QA (LAN)** | **API Gateway & Frontend (LAN)** | `http://10.43.98.211` / `http://10.43.98.253` / `http://10.43.99.6` | HTTP interno balanceado por `ServiceLB` |
+| **Observabilidad (LAN)** | **Grafana (Dashboards Multi-Ambiente)** | `http://10.43.98.217:3000` | Selector dinámico `$environment` (`qa` / `production`) |
+| **Observabilidad (LAN)** | **Prometheus (Métricas Multi-Clúster)** | `http://10.43.98.217:9090` | 47 Targets activos (`UP`) |
+| **Observabilidad (LAN)** | **Grafana Loki (Agregación de Logs)** | `http://10.43.98.217:3100` | Recibe logs de los 6 DaemonSets `promtail` |
+
+---
+
+## 2. Estado en Vivo del Clúster de PRODUCCIÓN (`v1.37.1+k3s1`)
+
+### 2.1 Nodos del Clúster y Aislamiento de Cargas (`workload=apps` vs. `workload=data`)
+En Producción se implementó **aislamiento físico de cargas**:
+* Los nodos `nbig37` (`10.43.98.231`) y `nbig50` (`10.43.98.244`) tienen la etiqueta **`workload=apps`** y alojan exclusivamente los microservicios stateless y el borde.
+* El nodo `nbig452` (`10.43.100.155`) tiene la etiqueta **`workload=data`** y el taint **`workload=data:NoSchedule`**, garantizando que sólo los 5 StatefulSets de persistencia (`postgres-0`, `kafka-0`, `rustfs-0`, `mongodb-0`, `vault-0`) se ejecuten en él.
+
 ```text
-NAME                                       READY   STATUS    RESTARTS   AGE     IP            NODE     NOMINATED NODE   READINESS GATES
-pod/frontend-dfbb99586-h2ntc               1/1     Running   0          18m     10.244.1.57   nbig59   <none>           <none>
-pod/frontend-dfbb99586-zrrj4               1/1     Running   0          18m     10.244.1.56   nbig59   <none>           <none>
-pod/kafka-exporter-64d9bc5547-knnp4        1/1     Running   0          14d     10.244.1.16   nbig59   <none>           <none>
-pod/ms-intake-lakehouse-7bddb8cd86-26bbv   1/1     Running   0          6h7m    10.244.1.53   nbig59   <none>           <none>
-pod/ms-matching-geo-576ddfd96d-8wgql       1/1     Running   0          25h     10.244.3.47   nbig65   <none>           <none>
-pod/ms-matching-geo-576ddfd96d-ks4tq       1/1     Running   0          25h     10.244.1.43   nbig59   <none>           <none>
-pod/ms-payments-674fb45849-c9m69           1/1     Running   0          4h56m   10.244.0.53   nbig17   <none>           <none>
-pod/ms-payments-674fb45849-jscbz           1/1     Running   0          4h56m   10.244.1.54   nbig59   <none>           <none>
-pod/ms-services-5d5f56dbbc-ghzjw           1/1     Running   0          4h41m   10.244.0.54   nbig17   <none>           <none>
-pod/ms-services-5d5f56dbbc-p9vs9           1/1     Running   0          4h43m   10.244.3.57   nbig65   <none>           <none>
-pod/ms-users-b84c95c6b-dvqpj               1/1     Running   0          4h24m   10.244.0.55   nbig17   <none>           <none>
-pod/ms-users-b84c95c6b-t5f96               1/1     Running   0          4h22m   10.244.1.55   nbig59   <none>           <none>
+NAME      STATUS   ROLES                VERSION        INTERNAL-IP     OS-IMAGE             CONTAINER-RUNTIME         WORKLOAD LABEL & TAINT
+nbig37    Ready    control-plane,etcd   v1.37.1+k3s1   10.43.98.231    Ubuntu 22.04.5 LTS   containerd://2.3.4-k3s1   workload=apps
+nbig50    Ready    control-plane,etcd   v1.37.1+k3s1   10.43.98.244    Ubuntu 22.04.5 LTS   containerd://2.3.4-k3s1   workload=apps
+nbig452   Ready    control-plane,etcd   v1.37.1+k3s1   10.43.100.155   Ubuntu 22.04.5 LTS   containerd://2.3.4-k3s1   workload=data (Taint: workload=data:NoSchedule)
 ```
 
-### Servicios de Red (`Service`) en `apps`
+### 2.2 Microservicios y Frontend en Producción (`namespace: apps`)
+
+#### Deployments e Imágenes Activas (Rama `main`)
+| Deployment | Imagen Desplegada (GHCR) | Réplicas Listas | Nodo Réplica 1 | Nodo Réplica 2 |
+| :--- | :--- | :---: | :---: | :---: |
+| **`frontend`** | `ghcr.io/grupo-fixia/ms-frontend:bafc723f4d51` | **2/2** | `nbig37` (`10.244.0.38`) | `nbig50` (`10.244.1.43`) |
+| **`ms-users`** | `ghcr.io/grupo-fixia/ms-users:236f5a7d0119` | **2/2** | `nbig37` (`10.244.0.35`) | `nbig50` (`10.244.1.41`) |
+| **`ms-services`** | `ghcr.io/grupo-fixia/ms-services:197642a78537` | **2/2** | `nbig37` (`10.244.0.39`) | `nbig50` (`10.244.1.44`) |
+| **`ms-payments`** | `ghcr.io/grupo-fixia/ms-payments:cd15779e1de1` | **2/2** | `nbig37` (`10.244.0.33`) | `nbig50` (`10.244.1.39`) |
+| **`ms-matching-geo`** | `ghcr.io/grupo-fixia/ms-matching-geo:202e0e2ed403` | **2/2** | `nbig37` (`10.244.0.31`) | `nbig50` (`10.244.1.37`) |
+| **`ms-intake-lakehouse`** | `ghcr.io/grupo-fixia/ms-intake-lakehouse:fd6f248ce16e` | **1/1** | `nbig37` (`10.244.0.36`) | — |
+| **`cloudflared-frontend`** | `cloudflare/cloudflared:latest` | **1/1** | `nbig50` (`10.244.1.25`) | — |
+| **`kafka-exporter`** | `danielqsj/kafka-exporter:v1.8.0` | **1/1** | `nbig50` (`10.244.1.6`) | — |
+
+#### Servicios de Red y Exposición de Métricas en Producción (`namespace: apps`)
 ```text
-NAME                          TYPE           CLUSTER-IP       EXTERNAL-IP                            PORT(S)          AGE   SELECTOR
-service/frontend              ClusterIP      10.245.16.71     <none>                                 80/TCP           28d   app=frontend
-service/kafka-exporter        LoadBalancer   10.245.15.32     10.43.98.211,10.43.98.253,10.43.99.6   9308:30142/TCP   14d   app=kafka-exporter
-service/ms-intake-lakehouse   ClusterIP      10.245.81.117    <none>                                 8080/TCP         27h   app=ms-intake-lakehouse
-service/ms-matching-geo       ClusterIP      10.245.231.101   <none>                                 8000/TCP         26h   app=ms-matching-geo
-service/ms-payments           ClusterIP      10.245.49.24     <none>                                 8080/TCP         27h   app=ms-payments
-service/ms-payments-metrics   LoadBalancer   10.245.245.148   10.43.98.211,10.43.98.253,10.43.99.6   9103:30666/TCP   27h   app=ms-payments
-service/ms-services           ClusterIP      10.245.7.156     <none>                                 8080/TCP         14d   app=ms-services
-service/ms-services-metrics   LoadBalancer   10.245.24.57     10.43.98.211,10.43.98.253,10.43.99.6   9102:30659/TCP   14d   app=ms-services
-service/ms-users              ClusterIP      10.245.122.235   <none>                                 8080/TCP         28d   app=ms-users
-service/ms-users-metrics      LoadBalancer   10.245.31.246    10.43.98.211,10.43.98.253,10.43.99.6   9101:30993/TCP   14d   app=ms-users
+NAME                              TYPE           CLUSTER-IP       EXTERNAL-IP                 PORT(S)          SELECTOR
+service/frontend                  ClusterIP      10.245.96.205    <none>                      80/TCP           app=frontend
+service/ms-users                  ClusterIP      10.245.224.138   <none>                      8080/TCP         app=ms-users
+service/ms-users-metrics          LoadBalancer   10.245.106.68    10.43.98.231,10.43.98.244   9101:30776/TCP   app=ms-users
+service/ms-services               ClusterIP      10.245.177.49    <none>                      8080/TCP         app=ms-services
+service/ms-services-metrics       LoadBalancer   10.245.160.231   10.43.98.231,10.43.98.244   9102:30458/TCP   app=ms-services
+service/ms-payments               ClusterIP      10.245.138.40    <none>                      8080/TCP         app=ms-payments
+service/ms-payments-metrics       LoadBalancer   10.245.193.209   10.43.98.231,10.43.98.244   9103:32063/TCP   app=ms-payments
+service/ms-matching-geo           ClusterIP      10.245.124.137   <none>                      8000/TCP         app=ms-matching-geo
+service/ms-matching-geo-metrics   LoadBalancer   10.245.16.249    10.43.98.231,10.43.98.244   9104:30450/TCP   app=ms-matching-geo
+service/ms-intake-lakehouse       ClusterIP      10.245.211.228   <none>                      8080/TCP         app=ms-intake-lakehouse
+service/kafka-exporter            LoadBalancer   10.245.39.22     10.43.98.231,10.43.98.244   9308:31924/TCP   app=kafka-exporter
 ```
 
-### Reglas de Enrutamiento Ingress (Traefik) en `apps`
+### 2.3 Capa de Datos Aislada en Producción (`namespace: data` en nodo `nbig452`)
 ```text
-NAME                                        CLASS     HOSTS   ADDRESS   PORTS   AGE
-ingress.networking.k8s.io/frontend          traefik   *                 80      28d
-ingress.networking.k8s.io/ms-matching-geo   traefik   *                 80      26h
-ingress.networking.k8s.io/ms-payments       traefik   *                 80      27h
-ingress.networking.k8s.io/ms-services       traefik   *                 80      14d
-ingress.networking.k8s.io/ms-users          traefik   *                 80      28d
+NAME                    READY   STATUS      RESTARTS   IP            NODE      PVC ASOCIADO          CAPACIDAD   STORAGECLASS
+pod/postgres-0          1/1     Running     0          10.244.2.7    nbig452   data-postgres-0       5Gi         local-path
+pod/kafka-0             1/1     Running     0          10.244.2.11   nbig452   data-kafka-0          8Gi         local-path
+pod/rustfs-0            1/1     Running     0          10.244.2.14   nbig452   data-rustfs-0         5Gi         local-path
+pod/mongodb-0           1/1     Running     0          10.244.2.9    nbig452   data-mongodb-0        5Gi         local-path
+pod/vault-0             1/1     Running     0          10.244.2.5    nbig452   data-vault-0          1Gi         local-path
+pod/rustfs-init-k2ckf   0/1     Completed   0          10.244.2.12   nbig452   (Job inicializador)   —           —
 ```
 
-### Imágenes y Versiones Desplegadas (`Deployments`)
-| Nombre del Microservicio | Imagen Oficial en GHCR | Réplicas Listas |
+### 2.4 Borde, API Gateway y Seguridad OWASP (`namespace: traefik`)
+```text
+NAME                                  READY   STATUS    RESTARTS   IP            NODE     ROL
+pod/traefik-8cb8956fb-hjw2j           1/1     Running   0          10.244.1.27   nbig50   API Gateway Réplica 1
+pod/traefik-8cb8956fb-pnf8w           1/1     Running   0          10.244.1.28   nbig50   API Gateway Réplica 2
+pod/cloudflared-api-795b96668-gvg6v   1/1     Running   0          10.244.1.26   nbig50   Túnel HTTPS API Gateway
+```
+* **Endurecimiento de Seguridad Activo en Producción y QA:**
+  1. **Cifrado de Credenciales en Payload (`ENC:v1:<nonce_hex>:<ciphertext_b64>`):** El interceptor en `ms-frontend/web/index.html` intercepta tanto `window.fetch` (cuerpos `Uint8Array` y `string`) como `XMLHttpRequest.prototype.send`, cifrando el campo `password` con SHA-256 CTR y nonce aleatorio de 128 bits antes de salir del navegador. `ms-users` (`CredentialCipher.java`) lo descifra en memoria antes de validar el hash **BCrypt costo 12**.
+  2. **Cabeceras OWASP ZAP en Traefik (`ConfigMap/traefik-dynamic-config`) y Nginx (`ms-frontend/nginx.conf`):** `Content-Security-Policy`, `Strict-Transport-Security` (HSTS), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`, `Cache-Control: no-store`, ocultación de versión (`server_tokens off`) y CORS restringido a orígenes autorizados.
+  3. **Bloqueo Perimetral de Rutas Internas:** La regla `PathPrefix('/internal')` en Traefik tiene prioridad `1000` y aplica el middleware `block-internal` (rechazo inmediato en el borde).
+
+---
+
+## 3. Malla de Eventos Apache Kafka (9 Tópicos) y Migraciones Flyway
+
+### 3.1 Los 9 Tópicos en Producción y QA (`kafka-0`)
+| Tópico | Particiones | Política (`cleanup.policy`) | Productor | Consumidores | Propósito |
+| :--- | :---: | :---: | :--- | :--- | :--- |
+| `fixia.users.technician-states` | `1` | **`compact`** | `ms-users` | `ms-services`, `ms-matching-geo` | Réplica del perfil, categorías, zona, horario, reputación y empresa de cada técnico (`GC-547`). |
+| `fixia.users.company-states` | `1` | **`compact`** | `ms-users` | `ms-services` | Réplica del estado, nombre comercial y reputación de cada empresa (`GC-547`). |
+| `fixia.services.participations` | `1` | **`compact`** | `ms-services` | `ms-users` | Réplica de contratos cerrados (`clientId`, `providerId`, `executorId`) para validar quién puede evaluar (`GC-547`). |
+| `fixia.services.executor-workloads` | `1` | **`compact`** | `ms-services` | `ms-users` | Réplica de carga activa de técnicos de empresa para validar desvinculaciones (`GC-547`). |
+| `fixia.payments.held-services` | `1` | **`compact`** | `ms-payments` | `ms-users` | Réplica de servicios con saldo retenido por prestador (`GC-547`). |
+| `fixia.users.sessions` | `1` | `delete` (`24h`) | `ms-users` (`500ms` relay) | `ms-services`, `ms-payments`, `ms-matching-geo` | Propagación inmediata de `sesion.revocada` (`jti` y `expiresAt`) para revocación local sin llamar a `ms-users`. |
+| `fixia.services.service-requests` | `3` | `delete` (`1GB`) | `ms-services` | `ms-payments`, `ms-intake-lakehouse` | Eventos de dominio del ciclo de vida del servicio (`solicitud.publicada`, `solicitud.cancelada`, `cotizacion.enviada`, `servicio.contratado`, `servicio.iniciado`, `servicio.finalizado`, `servicio.cerrado`, etc.). |
+| `fixia.payments.events` | `3` | `delete` (`1GB`) | `ms-payments` | `ms-services`, `ms-intake-lakehouse` | Eventos de dominio de pagos (`pago.creado`, `pago.procesado`, `pago.fallido`, `pago.completado`, `pago.reembolsado`). |
+| `fixia.users.evaluations` | `3` | `delete` (`1GB`) | `ms-users` | `ms-intake-lakehouse` | Eventos de dominio de usuarios (`evaluacion.registrada`, `empresa.tecnico_vinculado`, `empresa.tecnico_desvinculado`). |
+
+### 3.2 Historial de Migraciones Flyway Verificado en Producción y QA (`postgres-0`)
+* **Base de datos `ms_users`:** Hasta **`V14__state_replication` (`success = t`)**.
+* **Base de datos `ms_services`:** Hasta **`V19__state_replication` (`success = t`)**.
+* **Base de datos `ms_payments`:** Migraciones EF Core 8 aplicadas automáticamente al inicio (`DatabaseMigrator.ApplyMigrationsAsync`).
+
+---
+
+## 4. Estado en Vivo del Clúster de QA
+
+### Deployments e Imágenes Activas en QA (Rama `Qa`)
+| Deployment | Imagen Desplegada (GHCR) | Réplicas Listas |
 | :--- | :--- | :---: |
-| **`frontend`** | `ghcr.io/grupo-fixia/ms-frontend:26c4337f7157` | **2/2** |
-| **`ms-users`** | `ghcr.io/grupo-fixia/ms-users:60477861caaf` | **2/2** |
-| **`ms-services`** | `ghcr.io/grupo-fixia/ms-services:1218b914cbda` | **2/2** |
-| **`ms-payments`** | `ghcr.io/grupo-fixia/ms-payments:e5511e93f732` | **2/2** |
-| **`ms-matching-geo`** | `ghcr.io/grupo-fixia/ms-matching-geo:dab3928747b2` | **2/2** |
-| **`ms-intake-lakehouse`** | `ghcr.io/grupo-fixia/ms-intake-lakehouse:41eb263888f1` | **1/1** |
+| **`frontend`** | `ghcr.io/grupo-fixia/ms-frontend:bafc723f4d51` | **2/2** |
+| **`ms-users`** | `ghcr.io/grupo-fixia/ms-users:556ccf63981f` | **2/2** |
+| **`ms-services`** | `ghcr.io/grupo-fixia/ms-services:ac127d97f8a3` | **2/2** |
+| **`ms-payments`** | `ghcr.io/grupo-fixia/ms-payments:fc71baaf2bf3` | **2/2** |
+| **`ms-matching-geo`** | `ghcr.io/grupo-fixia/ms-matching-geo:552755ebfcd0` | **2/2** |
+| **`ms-intake-lakehouse`** | `ghcr.io/grupo-fixia/ms-intake-lakehouse:b4e660fec8da` | **1/1** |
 | **`kafka-exporter`** | `danielqsj/kafka-exporter:v1.8.0` | **1/1** |
 
 ---
 
-## 3. Capa de Datos: Persistencia, Eventos y Objetos (`namespace: data`)
+## 5. Observabilidad Multi-Ambiente (`10.43.98.217:9090`) — 47 / 47 Targets `UP`
 
-### Pods de Datos
-```text
-NAME                    READY   STATUS      RESTARTS   AGE    IP            NODE     NOMINATED NODE   READINESS GATES
-pod/kafka-0             1/1     Running     0          28d    10.244.0.15   nbig17   <none>           <none>
-pod/mongodb-0           1/1     Running     0          28d    10.244.3.9    nbig65   <none>           <none>
-pod/postgres-0          1/1     Running     0          28d    10.244.1.6    nbig59   <none>           <none>
-pod/rustfs-0            1/1     Running     0          2d4h   10.244.3.37   nbig65   <none>           <none>
-pod/rustfs-init-zjgdj   0/1     Completed   0          2d4h   10.244.3.38   nbig65   <none>           <none>
-pod/vault-0             1/1     Running     0          28d    10.244.3.7    nbig65   <none>           <none>
-```
+Todos los microservicios exponen métricas HTTP en formato Prometheus con plantillas de ruta normalizadas (sin `uri="UNKNOWN"`):
 
-### Servicios de Datos
 ```text
-NAME               TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)             AGE    SELECTOR
-service/kafka      ClusterIP   None             <none>        9092/TCP            28d    app=kafka
-service/mongodb    ClusterIP   10.245.144.247   <none>        27017/TCP           28d    app=mongodb
-service/postgres   ClusterIP   10.245.8.207     <none>        5432/TCP            28d    app=postgres
-service/rustfs     ClusterIP   10.245.216.63    <none>        9000/TCP,9001/TCP   2d4h   app=rustfs
-service/vault      ClusterIP   10.245.29.138    <none>        8200/TCP            28d    app=vault
-```
+TOTAL TARGETS: 47 | UP: 47 (100% Saludables)
 
-### Volúmenes Persistentes (PVC)
-```text
-NAME                                    STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
-persistentvolumeclaim/data-kafka-0      Bound    pvc-b43f68fd-b857-4c8d-804a-bb227f18deb7   8Gi        RWO            local-path     28d
-persistentvolumeclaim/data-mongodb-0    Bound    pvc-6a91b3d9-5e12-4e11-96e8-99d6876ef94a   5Gi        RWO            local-path     28d
-persistentvolumeclaim/data-postgres-0   Bound    pvc-56fa2f28-d4c0-4113-a39f-44eef3bb4fe1   5Gi        RWO            local-path     28d
-persistentvolumeclaim/data-rustfs-0     Bound    pvc-e0c40ea6-9ef2-4507-afbb-7ef6f9b9821b   5Gi        RWO            local-path     2d4h
-persistentvolumeclaim/data-vault-0      Bound    pvc-c32900ef-dabb-471d-a018-ff275d420c8a   1Gi        RWO            local-path     28d
+STATE | ENVIRONMENT   | JOB                    | SCRAPE_URL
+up    | observability | loki                   | http://loki.observability.svc.cluster.local:3100/metrics
+up    | observability | obs-k3s-node           | https://kubernetes.default.svc:443/api/v1/nodes/nbig23/proxy/metrics/cadvisor
+up    | observability | obs-k3s-pods           | http://10.246.0.15:3100/metrics
+up    | observability | obs-k3s-pods           | http://10.246.0.30:9090/metrics
+up    | observability | prometheus             | http://localhost:9090/metrics
+up    | production    | prod-k3s-nodes-cadvisor| https://10.43.98.231:10250/metrics/cadvisor, https://10.43.98.244:10250/metrics/cadvisor, https://10.43.100.155:10250/metrics/cadvisor
+up    | production    | prod-k3s-nodes-kubelet | https://10.43.98.231:10250/metrics, https://10.43.98.244:10250/metrics, https://10.43.100.155:10250/metrics
+up    | production    | prod-traefik           | http://10.43.98.231:8080/metrics, http://10.43.98.244:8080/metrics
+up    | production    | prod-kafka             | http://10.43.98.231:9308/metrics, http://10.43.98.244:9308/metrics
+up    | production    | prod-ms-users          | http://10.43.98.231:9101/actuator/prometheus, http://10.43.98.244:9101/actuator/prometheus
+up    | production    | prod-ms-services       | http://10.43.98.231:9102/actuator/prometheus, http://10.43.98.244:9102/actuator/prometheus
+up    | production    | prod-ms-payments       | http://10.43.98.231:9103/actuator/prometheus, http://10.43.98.244:9103/actuator/prometheus
+up    | production    | prod-ms-matching-geo   | http://10.43.98.231:9104/actuator/prometheus, http://10.43.98.244:9104/actuator/prometheus
+up    | qa            | qa-k3s-nodes-cadvisor  | https://10.43.98.211:10250/metrics/cadvisor, https://10.43.98.253:10250/metrics/cadvisor, https://10.43.99.6:10250/metrics/cadvisor
+up    | qa            | qa-k3s-nodes-kubelet   | https://10.43.98.211:10250/metrics, https://10.43.98.253:10250/metrics, https://10.43.99.6:10250/metrics
+up    | qa            | qa-traefik             | http://10.43.98.211:8080/metrics, http://10.43.98.253:8080/metrics, http://10.43.99.6:8080/metrics
+up    | qa            | qa-kafka               | http://10.43.98.211:9308/metrics, http://10.43.98.253:9308/metrics, http://10.43.99.6:9308/metrics
+up    | qa            | qa-ms-users            | http://10.43.98.211:9101/actuator/prometheus, http://10.43.98.253:9101/actuator/prometheus, http://10.43.99.6:9101/actuator/prometheus
+up    | qa            | qa-ms-services         | http://10.43.98.211:9102/actuator/prometheus, http://10.43.98.253:9102/actuator/prometheus, http://10.43.99.6:9102/actuator/prometheus
+up    | qa            | qa-ms-payments         | http://10.43.98.211:9103/actuator/prometheus, http://10.43.98.253:9103/actuator/prometheus, http://10.43.99.6:9103/actuator/prometheus
+up    | qa            | qa-ms-matching-geo     | http://10.43.98.211:9104/actuator/prometheus, http://10.43.98.253:9104/actuator/prometheus, http://10.43.99.6:9104/actuator/prometheus
 ```
 
 ---
 
-## 4. Borde y Enrutamiento: Traefik (`namespace: traefik`)
+## 6. Automatización IaC (Ansible) y Pipelines CI/CD Duales
 
-```text
-NAME                          READY   STATUS    RESTARTS   AGE   IP            NODE     NOMINATED NODE   READINESS GATES
-pod/traefik-7bbb4dc5c-9h8rl   1/1     Running   0          25h   10.244.3.50   nbig65   <none>           <none>
-pod/traefik-7bbb4dc5c-h845r   1/1     Running   0          25h   10.244.0.46   nbig17   <none>           <none>
+### 6.1 Estructura de Ansible en `ms-orchestrator/ansible/`
+* **Inventario de QA:** `ansible/inventory/hosts.yml` (`qa-k3s-01..03` + `qa-obs-01`).
+* **Inventario de Producción:** `ansible/inventory/produccion/hosts.yml` (`prod-k3s-01..03` + `qa-obs-01`) con variables cifradas en `ansible/inventory/produccion/group_vars/all/vault.yml`.
+* **Playbooks parametrizados (`01` a `12`):**
+  * `01-base.yml`: Preparación del SO, módulos kernel, `sysctl`, swap off.
+  * `02-k3s-bootstrap.yml`: Inicialización del clúster HA con `etcd` embebido, etiquetado de nodos (`workload=apps`, `workload=data`) y taints.
+  * `04-observability.yml`: Despliegue de Prometheus, Grafana, Loki y DaemonSets Promtail multi-ambiente.
+  * `05-traefik.yml` y `05b-cloudflared-api.yml`: API Gateway Traefik v3.3 con middlewares OWASP/CORS/RateLimit y túneles Cloudflare.
+  * `06-storage.yml` a `10b-rustfs.yml`: Despliegue de Vault, PostgreSQL 16, MongoDB 7, Apache Kafka 3.8 KRaft (con creación de los 9 tópicos y `cleanup.policy=compact`) y RustFS S3.
+  * `11-apps.yml` y `12-apps-bootstrap.yml`: Creación de bases de datos, secretos, claves RSA JWT y ServiceAccount RBAC `deployer` para CI/CD.
 
-NAME              TYPE           CLUSTER-IP       EXTERNAL-IP                            PORT(S)                                     AGE   SELECTOR
-service/traefik   LoadBalancer   10.245.138.244   10.43.98.211,10.43.98.253,10.43.99.6   80:30207/TCP,443:30516/TCP,8080:30565/TCP   28d   app=traefik
-```
-
----
-
-## 5. Observabilidad Centralizada y Agentes de Logs
-
-### Agentes Promtail (DaemonSet en QA — `namespace: observability`)
-```text
-NAME             READY   STATUS    RESTARTS   AGE   IP            NODE     NOMINATED NODE   READINESS GATES
-promtail-2lst2   1/1     Running   0          15d   10.244.0.20   nbig17   <none>           <none>
-promtail-b6dhn   1/1     Running   0          15d   10.244.1.14   nbig59   <none>           <none>
-promtail-qn985   1/1     Running   0          15d   10.244.3.18   nbig65   <none>           <none>
-```
-
-### Targets de Prometheus (`qa-obs-01:9090`) — 23 de 23 UP (100% Saludables)
-```text
-HEALTH  JOB                     SCRAPE_URL
-up      loki                    http://loki.observability.svc.cluster.local:3100/metrics
-up      obs-k3s-node            https://kubernetes.default.svc:443/api/v1/nodes/nbig23/proxy/metrics/cadvisor
-up      obs-k3s-pods            http://10.246.0.15:3100/metrics
-up      obs-k3s-pods            http://10.246.0.23:9090/metrics
-up      prometheus              http://localhost:9090/metrics
-up      qa-k3s-nodes-cadvisor   https://10.43.99.6:10250/metrics/cadvisor
-up      qa-k3s-nodes-cadvisor   https://10.43.98.211:10250/metrics/cadvisor
-up      qa-k3s-nodes-cadvisor   https://10.43.98.253:10250/metrics/cadvisor
-up      qa-k3s-nodes-kubelet    https://10.43.98.253:10250/metrics
-up      qa-k3s-nodes-kubelet    https://10.43.99.6:10250/metrics
-up      qa-k3s-nodes-kubelet    https://10.43.98.211:10250/metrics
-up      qa-kafka                http://10.43.99.6:9308/metrics
-up      qa-kafka                http://10.43.98.211:9308/metrics
-up      qa-kafka                http://10.43.98.253:9308/metrics
-up      qa-ms-services          http://10.43.98.211:9102/actuator/prometheus
-up      qa-ms-services          http://10.43.98.253:9102/actuator/prometheus
-up      qa-ms-services          http://10.43.99.6:9102/actuator/prometheus
-up      qa-ms-users             http://10.43.98.211:9101/actuator/prometheus
-up      qa-ms-users             http://10.43.98.253:9101/actuator/prometheus
-up      qa-ms-users             http://10.43.99.6:9101/actuator/prometheus
-up      qa-traefik              http://10.43.98.211:8080/metrics
-up      qa-traefik              http://10.43.98.253:8080/metrics
-up      qa-traefik              http://10.43.99.6:8080/metrics
-```
-
----
-
-## 6. Bus de Eventos Kafka, Grupos de Consumidores y Persistencia
-
-### Tópicos Creados en Kafka
-```text
-__consumer_offsets
-fixia.payments.events
-fixia.services.service-requests
-fixia.users.evaluations
-test
-```
-
-### Estado de los Grupos de Consumidores (LAG = 0 en todos)
-```text
-GROUP               TOPIC                           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG  CLIENT-ID
-ms-intake-lakehouse fixia.users.evaluations         0          13              13              0    kafka-go
-ms-intake-lakehouse fixia.users.evaluations         1          6               6               0    kafka-go
-ms-intake-lakehouse fixia.users.evaluations         2          3               3               0    kafka-go
-ms-intake-lakehouse fixia.payments.events           0          126             126             0    kafka-go
-ms-intake-lakehouse fixia.services.service-requests 0          485             485             0    kafka-go
-ms-payments         fixia.services.service-requests 0          485             485             0    rdkafka
-ms-services         fixia.payments.events           0          126             126             0    consumer-ms-services
-```
-
-### Bases de Datos en PostgreSQL 16
-```text
-    Name     |    Owner    | Encoding | Collate    | Ctype      | Access privileges
--------------+-------------+----------+------------+------------+-------------------
- ms_payments | ms_payments | UTF8     | en_US.utf8 | en_US.utf8 | 
- ms_services | ms_services | UTF8     | en_US.utf8 | en_US.utf8 | 
- ms_users    | ms_users    | UTF8     | en_US.utf8 | en_US.utf8 | 
- postgres    | postgres    | UTF8     | en_US.utf8 | en_US.utf8 | 
-```
-
-### Métricas de Ingesta del Data Lakehouse (`ms-intake-lakehouse`)
-```json
-{
-  "processed_total": 633,
-  "stored_total": 630,
-  "duplicates_total": 0,
-  "quarantined_total": 3,
-  "errors_total": 0
-}
-```
-
----
-
-## 7. Muestras de Logs Recientes por Microservicio (Estado Saludable)
-
-### `ms-users`
-```text
-INFO 1 --- [ms-users] o.s.b.w.embedded.tomcat.TomcatWebServer : Tomcat started on port 8080 (http)
-INFO 1 --- [ms-users] com.fixia.users.Application : Started Application in 17.456 seconds
-WARN 1 --- [ms-users] com.fixia.users.config.QaSeedLoader : Perfil seed-qa activo: se cargan cuentas de QA con contraseña conocida.
-INFO 1 --- [ms-users] com.fixia.users.config.QaSeedLoader : Datos de QA de empresas y técnicos cargados (seed/qa_empresas.sql).
-Microservicio ms-users iniciado correctamente.
-```
-
-### `ms-services`
-```text
-INFO 1 --- [ms-services] o.s.b.w.embedded.tomcat.TomcatWebServer : Tomcat started on port 8080 (http)
-INFO 1 --- [ms-services] c.fixia.services.ServicesApplication : Started ServicesApplication in 16.294 seconds
-INFO 1 --- [ms-services] o.a.k.c.c.internals.ConsumerCoordinator : [Consumer clientId=consumer-ms-services-1] Subscribed to topic(s): fixia.payments.events
-Microservicio ms-services iniciado correctamente.
-```
-
-### `ms-payments`
-```text
-info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
-      Request finished HTTP/1.1 GET http://10.244.1.54:8080/health - 200 - application/json;+charset=utf-8 0.2652ms
-info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
-      Request finished HTTP/1.1 GET http://10.244.0.53:8080/health - 200 - application/json;+charset=utf-8 0.7625ms
-```
-
-### `ms-matching-geo`
-```text
-INFO: 10.244.3.1:49688 - "GET /health HTTP/1.1" 200 OK
-INFO: 10.244.1.1:55434 - "GET /health HTTP/1.1" 200 OK
-```
-
-### `ms-intake-lakehouse`
-```text
-2026/11/05 22:57:02 Evento persistido exitosamente en RustFS: eventId=4dda202a-..., tipo=servicio.contratado, seq=7, partition=0, offset=481
-2026/11/05 22:57:02 Evento persistido exitosamente en RustFS: eventId=293d48b8-..., tipo=pago.procesado, seq=2, partition=0, offset=124
-2026/11/05 22:57:29 Evento persistido exitosamente en RustFS: eventId=9086960e-..., tipo=servicio.iniciado, seq=8, partition=0, offset=482
-2026/11/05 22:57:38 Evento persistido exitosamente en RustFS: eventId=c3010a24-..., tipo=servicio.finalizado, seq=9, partition=0, offset=483
-2026/11/05 22:57:47 Evento persistido exitosamente en RustFS: eventId=c542acff-..., tipo=pago.completado, seq=3, partition=0, offset=125
-2026/11/05 22:57:47 Evento persistido exitosamente en RustFS: eventId=c10f9e98-..., tipo=servicio.cerrado, seq=10, partition=0, offset=484
-```
-
+### 6.2 Flujo CI/CD por Ambiente en los 6 Repositorios
+| Ambiente | Rama Git | Workflow CI | Quality Gate en CI | Workflow CD | Runner Self-Hosted (`10.43.98.217`) | Kubeconfig y Manifiesto |
+| :--- | :---: | :---: | :--- | :---: | :--- | :--- |
+| **QA** | `Qa` | `ci.yml` | • `ms-users`: `mvn -B verify` (JaCoCo `>= 80%`)<br/>• `ms-services`: `mvn -B verify` (JaCoCo `>= 85%`)<br/>• `ms-matching-geo`: `pytest --cov-fail-under=85`<br/>• `ms-intake-lakehouse`: `go test -cover` (`>= 80%`)<br/>• `ms-frontend`: `flutter test --coverage` (`>= 80%`)<br/>• `ms-payments`: `dotnet test` (xUnit + PostgreSQL 16) | `cd.yml` | `actions.runner.Grupo-Fixia.nbig23-qa.service` (`[self-hosted, qa]`) | `~/.kube/deployer.yaml` → `deploy/<servicio>.yaml` |
+| **Producción** | `main` | `ci-prod.yml` | Mismo Quality Gate estricto + Build Docker multi-stage con `USERS_API_BASE_URL` apuntando al API Gateway HTTPS de Producción | `cd-prod.yml` | `actions.runner.Grupo-Fixia.nbig23-prod.service` (`[self-hosted, prod]`) | `~/.kube/deployer-prod.yaml` → `deploy/<servicio>-prod.yaml` |
