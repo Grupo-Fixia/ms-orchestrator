@@ -46,7 +46,7 @@ data:
       filename: /run/promtail/positions.yaml
 
     clients:
-      - url: http://{{ hostvars['qa-obs-01']['ansible_host'] | default('10.43.98.217') }}:3100/loki/api/v1/push
+      - url: http://{{ obs_api_endpoint | default('10.43.98.217') }}:3100/loki/api/v1/push
         external_labels:
           environment: "{{ promtail_env | default('qa') }}"
           cluster: "{{ promtail_cluster | default('qa') }}"
@@ -91,6 +91,9 @@ spec:
       serviceAccountName: promtail
       tolerations:
         - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: workload
           operator: Exists
           effect: NoSchedule
       containers:

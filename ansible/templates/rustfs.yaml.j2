@@ -36,6 +36,13 @@ spec:
       labels:
         app: rustfs
     spec:
+      nodeSelector:
+        workload: "{{ data_node_selector | default('data') }}"
+      tolerations:
+        - key: "workload"
+          operator: "Equal"
+          value: "{{ data_node_selector | default('data') }}"
+          effect: "NoSchedule"
       initContainers:
         - name: fix-perms
           image: busybox:1.36
@@ -90,6 +97,13 @@ spec:
       labels:
         app: rustfs-init
     spec:
+      nodeSelector:
+        workload: "{{ data_node_selector | default('data') }}"
+      tolerations:
+        - key: "workload"
+          operator: "Equal"
+          value: "{{ data_node_selector | default('data') }}"
+          effect: "NoSchedule"
       restartPolicy: OnFailure
       containers:
         - name: rustfs-init

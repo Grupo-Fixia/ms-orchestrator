@@ -1,0 +1,17 @@
+# Plantilla de variables sensibles para Producción.
+# Para crear y cifrar tu vault manualmente sin exponer credenciales en texto plano:
+#   cp ms-orchestrator/ansible/inventory/produccion/group_vars/all/vault.yml.example \
+#      ms-orchestrator/ansible/inventory/produccion/group_vars/all/vault.yml
+#   nano ms-orchestrator/ansible/inventory/produccion/group_vars/all/vault.yml
+#   ansible-vault encrypt ms-orchestrator/ansible/inventory/produccion/group_vars/all/vault.yml
+
+vault_k3s_token: "CAMBIAR_POR_TOKEN_SECRETO_K3S_PROD"
+vault_postgres_password: "CAMBIAR_POR_PASSWORD_POSTGRES_ROOT_PROD"
+vault_mongo_root_password: "CAMBIAR_POR_PASSWORD_MONGO_ROOT_PROD"
+vault_users_db_password: "CAMBIAR_POR_PASSWORD_USERS_DB_PROD"
+vault_services_db_password: "CAMBIAR_POR_PASSWORD_SERVICES_DB_PROD"
+vault_payments_db_password: "CAMBIAR_POR_PASSWORD_PAYMENTS_DB_PROD"
+vault_rustfs_access_key: "fixia_rustfs_prod_admin"
+vault_rustfs_secret_key: "CAMBIAR_POR_SECRET_KEY_RUSTFS_PROD"
+vault_internal_api_key: "CAMBIAR_POR_INTERNAL_API_KEY_PROD"
+vault_grafana_password: "CAMBIAR_POR_PASSWORD_GRAFANA_PROD"

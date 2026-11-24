@@ -129,6 +129,9 @@ data:
       # ─── 2. Clúster de QA (qa-k3s-01, qa-k3s-02, qa-k3s-03) ───
       - job_name: qa-k3s-nodes-cadvisor
         scheme: https
+{% if qa_prometheus_scraper_token is defined and qa_prometheus_scraper_token | length > 0 %}
+        bearer_token: "{{ qa_prometheus_scraper_token }}"
+{% endif %}
         tls_config:
           insecure_skip_verify: true
         metrics_path: /metrics/cadvisor
@@ -143,6 +146,9 @@ data:
 
       - job_name: qa-k3s-nodes-kubelet
         scheme: https
+{% if qa_prometheus_scraper_token is defined and qa_prometheus_scraper_token | length > 0 %}
+        bearer_token: "{{ qa_prometheus_scraper_token }}"
+{% endif %}
         tls_config:
           insecure_skip_verify: true
         metrics_path: /metrics
@@ -181,7 +187,9 @@ data:
 
       - job_name: prod-kafka
         static_configs:
-          - targets: []
+          - targets:
+              - '10.43.98.231:9308'
+              - '10.43.98.244:9308'
             labels:
               environment: 'production'
               cluster: 'production'
@@ -227,17 +235,75 @@ data:
               cluster: 'qa'
               app: 'ms-payments'
 
-      # ─── 4. Clúster de Producción (Placeholder preparado para futuro despliegue) ───
+      # ─── 5. Clúster de Producción (prod-k3s-01, prod-k3s-02, prod-k3s-03) ───
       - job_name: prod-k3s-nodes-cadvisor
         scheme: https
+{% if prod_prometheus_scraper_token is defined and prod_prometheus_scraper_token | length > 0 %}
+        bearer_token: "{{ prod_prometheus_scraper_token }}"
+{% endif %}
         tls_config:
           insecure_skip_verify: true
         metrics_path: /metrics/cadvisor
         static_configs:
-          - targets: []
+          - targets:
+              - '10.43.98.231:10250'
+              - '10.43.98.244:10250'
+              - '10.43.100.155:10250'
             labels:
               environment: 'production'
               cluster: 'production'
+
+      - job_name: prod-k3s-nodes-kubelet
+        scheme: https
+{% if prod_prometheus_scraper_token is defined and prod_prometheus_scraper_token | length > 0 %}
+        bearer_token: "{{ prod_prometheus_scraper_token }}"
+{% endif %}
+        tls_config:
+          insecure_skip_verify: true
+        metrics_path: /metrics
+        static_configs:
+          - targets:
+              - '10.43.98.231:10250'
+              - '10.43.98.244:10250'
+              - '10.43.100.155:10250'
+            labels:
+              environment: 'production'
+              cluster: 'production'
+
+      - job_name: prod-traefik
+        metrics_path: /metrics
+        static_configs:
+          - targets:
+              - '10.43.98.231:8080'
+              - '10.43.98.244:8080'
+            labels:
+              environment: 'production'
+              cluster: 'production'
+              app: 'traefik'
+
+      - job_name: prod-ms-users
+        metrics_path: /actuator/prometheus
+        scrape_interval: 15s
+        static_configs:
+          - targets:
+              - '10.43.98.231:9101'
+              - '10.43.98.244:9101'
+            labels:
+              environment: 'production'
+              cluster: 'production'
+              app: 'ms-users'
+
+      - job_name: prod-ms-services
+        metrics_path: /actuator/prometheus
+        scrape_interval: 15s
+        static_configs:
+          - targets:
+              - '10.43.98.231:9102'
+              - '10.43.98.244:9102'
+            labels:
+              environment: 'production'
+              cluster: 'production'
+              app: 'ms-services'
 ---
 # ──────────────────────────────────────────────
 # Prometheus — PVC, Deployment, Service, Ingress
@@ -294,11 +360,11 @@ spec:
             periodSeconds: 10
           livenessProbe:
             httpGet: { path: /-/healthy, port: http }
-            initialDelaySeconds: 30
+            initialDelaySeconds: 120
             periodSeconds: 15
           resources:
             requests: { cpu: 100m, memory: 256Mi }
-            limits: { memory: 512Mi }
+            limits: { memory: 1Gi }
           volumeMounts:
             - { name: config, mountPath: /etc/prometheus }
             - { name: data, mountPath: /prometheus }

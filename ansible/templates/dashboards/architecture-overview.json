@@ -581,7 +581,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum by (app) (count_over_time({environment=~\"$environment\", app!=\"\"}[1h]))",
+          "expr": "sum by (app) (count_over_time({environment=~\"$environment\", app!=\"\"}[24h]))",
           "instant": true,
           "legendFormat": "{{app}}",
           "queryType": "instant",
@@ -709,8 +709,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(jvm_memory_used_bytes{area=\"heap\", environment=~\"$environment\", app=~\"$app\"}) by (app)",
-          "legendFormat": "{{app}} (Usada)",
+          "expr": "sum by (app) (label_replace(container_memory_working_set_bytes{environment=~\"$environment\", namespace=\"apps\", container!=\"\", container!=\"POD\", container=~\"$app\"}, \"app\", \"$1\", \"container\", \"(.*)\"))",
+          "legendFormat": "{{app}} (Contenedor K8s)",
           "range": true,
           "refId": "A"
         },
@@ -720,13 +720,24 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(jvm_memory_max_bytes{area=\"heap\", environment=~\"$environment\", app=~\"$app\"}) by (app)",
-          "legendFormat": "{{app}} (Límite Máx)",
+          "expr": "sum(jvm_memory_used_bytes{area=\"heap\", environment=~\"$environment\", app=~\"$app\"}) by (app)",
+          "legendFormat": "{{app}} (JVM Heap Usada)",
           "range": true,
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(jvm_memory_max_bytes{area=\"heap\", environment=~\"$environment\", app=~\"$app\"}) by (app)",
+          "legendFormat": "{{app}} (Límite Máx JVM)",
+          "range": true,
+          "refId": "C"
         }
       ],
-      "title": "Memoria Heap JVM (Usada vs Máxima)",
+      "title": "Memoria por Microservicio (Contenedores K8s & JVM Heap)",
       "type": "timeseries"
     },
     {
@@ -812,10 +823,21 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
+          "expr": "sum by (app) (label_replace(rate(container_cpu_usage_seconds_total{environment=~\"$environment\", namespace=\"apps\", container!=\"\", container!=\"POD\", container=~\"$app\"}[2m]), \"app\", \"$1\", \"container\", \"(.*)\")) * 100",
+          "legendFormat": "{{app}} (Contenedor K8s CPU)",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
           "expr": "avg(process_cpu_usage{environment=~\"$environment\", app=~\"$app\"}) by (app) * 100",
           "legendFormat": "{{app}} (JVM CPU)",
           "range": true,
-          "refId": "A"
+          "refId": "B"
         },
         {
           "datasource": {
@@ -826,10 +848,10 @@
           "expr": "avg(system_cpu_usage{environment=~\"$environment\", app=~\"$app\"}) by (app) * 100",
           "legendFormat": "{{app}} (Host CPU)",
           "range": true,
-          "refId": "B"
+          "refId": "C"
         }
       ],
-      "title": "Consumo de CPU (Proceso JVM vs Sistema)",
+      "title": "Consumo de CPU por Microservicio (Contenedores K8s & JVM)",
       "type": "timeseries"
     },
     {
@@ -1858,10 +1880,10 @@
           "value": "$__all"
         },
         "datasource": {
-          "type": "loki",
-          "uid": "loki"
+          "type": "prometheus",
+          "uid": "prometheus"
         },
-        "definition": "label_values({environment=~\"$environment\", app!=\"\"}, app)",
+        "definition": "label_values(container_memory_working_set_bytes{environment=~\"$environment\", namespace=~\"apps|data|traefik\", container!=\"\", container!=\"POD\"}, container)",
         "description": "Filtrar por uno o varios microservicios",
         "hide": 0,
         "includeAll": true,
@@ -1870,12 +1892,11 @@
         "name": "app",
         "options": [],
         "query": {
-          "label": "app",
-          "refId": "LokiVariableQueryEditor-VariableQuery",
-          "stream": "{environment=~\"$environment\", app!=\"\"}",
-          "type": 1
+          "qryType": 1,
+          "query": "label_values(container_memory_working_set_bytes{environment=~\"$environment\", namespace=~\"apps|data|traefik\", container!=\"\", container!=\"POD\"}, container)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
-        "refresh": 2,
+        "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,
