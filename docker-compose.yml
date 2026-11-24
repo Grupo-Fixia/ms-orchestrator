@@ -289,7 +289,8 @@ services:
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
       SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE: 10MB
-      SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE: 10MB
+      SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE: 11MB
+      SERVER_TOMCAT_MAX_SWALLOW_SIZE: -1
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ms-services.rule=Path(`/api/services`) || PathPrefix(`/api/services/`)"
