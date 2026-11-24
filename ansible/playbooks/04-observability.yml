@@ -49,6 +49,17 @@
         path: /tmp/observability.yaml
         state: absent
 
+    - name: Desplegar túneles Cloudflare para Grafana y Prometheus
+      ansible.builtin.command: k3s kubectl apply -f "{{ playbook_dir }}/../templates/cloudflared-observability.yaml.j2"
+      register: apply_cf_obs
+      changed_when: "'configured' in apply_cf_obs.stdout or 'created' in apply_cf_obs.stdout"
+
+    - name: Esperar a que los túneles Cloudflare de Observabilidad estén listos
+      ansible.builtin.shell: |
+        k3s kubectl -n observability rollout status deployment/cloudflared-grafana --timeout=120s
+        k3s kubectl -n observability rollout status deployment/cloudflared-prometheus --timeout=120s
+      changed_when: false
+
     - name: URLs de acceso a Observabilidad
       ansible.builtin.debug:
         msg:

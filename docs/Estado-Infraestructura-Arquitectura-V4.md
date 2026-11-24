@@ -17,6 +17,8 @@
 | **Producción (Público)** | **API Gateway (`traefik`)** | `https://fits-descending-section-constant.trycloudflare.com` | HTTPS (`TLS 1.3` vía Cloudflare Tunnel → `service/traefik:80`) |
 | **Producción (LAN)** | **API Gateway & Frontend (LAN)** | `http://10.43.98.231` / `http://10.43.98.244` | HTTP interno balanceado por `ServiceLB` |
 | **QA (LAN)** | **API Gateway & Frontend (LAN)** | `http://10.43.98.211` / `http://10.43.98.253` / `http://10.43.99.6` | HTTP interno balanceado por `ServiceLB` |
+| **Observabilidad (Público)** | **Grafana (Dashboards Multi-Ambiente)** | `https://logging-districts-beautiful-loose.trycloudflare.com` | HTTPS (`TLS 1.3` vía Cloudflare Tunnel → `service/grafana:3000`) |
+| **Observabilidad (Público)** | **Prometheus (Métricas Multi-Clúster)** | `https://europe-cattle-stays-ntsc.trycloudflare.com` | HTTPS (`TLS 1.3` vía Cloudflare Tunnel → `service/prometheus:9090`) |
 | **Observabilidad (LAN)** | **Grafana (Dashboards Multi-Ambiente)** | `http://10.43.98.217:3000` | Selector dinámico `$environment` (`qa` / `production`) |
 | **Observabilidad (LAN)** | **Prometheus (Métricas Multi-Clúster)** | `http://10.43.98.217:9090` | 47 Targets activos (`UP`) |
 | **Observabilidad (LAN)** | **Grafana Loki (Agregación de Logs)** | `http://10.43.98.217:3100` | Recibe logs de los 6 DaemonSets `promtail` |
