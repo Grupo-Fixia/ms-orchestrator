@@ -161,3 +161,26 @@ flowchart LR
     OBS -->|"Scrape :9101-:9104, :9308, :8080, :10250"| ProdCluster
     P1_PR & P2_PR & P3_PR -->|"Push Logs (environment=production)"| OBS
 ```
+
+---
+
+## 4. Galería de Diagramas Visuales de Alto Nivel (`docs/images/`)
+
+### 4.1 Arquitectura de Microservicios, API Gateway y Malla de Eventos (Kafka + Lakehouse)
+![Arquitectura de Microservicios y Malla de Eventos](./images/01-arquitectura-microservicios-kafka-lakehouse.jpg)
+
+### 4.2 Topología General Multi-Ambiente (Red LAN `10.43.98.0/22` y Nodo Central Orquestador/Observador)
+![Topología General Multi-Ambiente](./images/02-topologia-general-multi-ambiente.jpg)
+
+### 4.3 Distribución Física del Ambiente de PRODUCCIÓN (K3s HA + Nodo de Datos Aislado + Cloudflare)
+![Infraestructura Física de Producción](./images/03-infraestructura-fisica-produccion.jpg)
+
+### 4.4 Distribución Física del Ambiente de QA (K3s HA + Workers + Datos)
+![Infraestructura Física de QA](./images/04-infraestructura-fisica-qa.jpg)
+
+### 4.5 Nodo Central de Orquestación (Ansible), CI/CD Runners y Observabilidad (`10.43.98.217`)
+![Nodo Central Orquestador y Observabilidad](./images/05-nodo-central-orquestador-observabilidad.jpg)
+
+### 4.6 Diagrama de Despliegue Continuo (CI/CD + Ansible IaC) para QA y PRODUCCIÓN
+![Diagrama de Despliegue QA y Producción](./images/06-despliegue-cicd-qa-y-produccion.jpg)
+
