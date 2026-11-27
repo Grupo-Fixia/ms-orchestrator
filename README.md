@@ -12,7 +12,9 @@ Toda la documentación técnica actualizada se encuentra organizada en la carpet
 2. **[Diseño de Alto Nivel (HLD) — Arquitectura Lógica, Malla de Eventos Kafka y Topología Física (`docs/HLD-Arquitectura-e-Infraestructura.md`)](./docs/HLD-Arquitectura-e-Infraestructura.md)**
 3. **[Estado Operativo e Inventario en Vivo de Producción, QA y Observabilidad (`docs/Estado-Infraestructura-Arquitectura-V4.md`)](./docs/Estado-Infraestructura-Arquitectura-V4.md)**
 4. **[Runbook Operativo: Ansible IaC, CI/CD Runners, Kafka, Seguridad y Cloudflare (`docs/Runbook-Operacion-IaC-y-CICD.md`)](./docs/Runbook-Operacion-IaC-y-CICD.md)**
-5. **[Visor HTML Interactivo de Diagramas HLD (`docs/hld-arquitectura-interactivo.html`)](./docs/hld-arquitectura-interactivo.html)**
+5. **[Sistema de Calificación de Gestión de Riesgos Aplicado a Fixia (`docs/Sistema-Calificacion-Riesgos-Fixia.md`)](./docs/Sistema-Calificacion-Riesgos-Fixia.md)**
+6. **[Plan de Recuperación ante Incidentes y Desastres — DRP / BCP (`docs/Plan-Recuperacion-Incidentes-DRP-Fixia.md`)](./docs/Plan-Recuperacion-Incidentes-DRP-Fixia.md)**
+7. **[Visor HTML Interactivo de Diagramas HLD (`docs/hld-arquitectura-interactivo.html`)](./docs/hld-arquitectura-interactivo.html)**
 
 ---
 
